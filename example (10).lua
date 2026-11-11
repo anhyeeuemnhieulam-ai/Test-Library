@@ -1,6 +1,6 @@
 --[[ Yqantg Hub · example.lua — one of every component the library has ]]
 
-local Yqantg = loadstring(game:HttpGet("https://raw.githubusercontent.com/anhyeeuemnhieulam-ai/Yqantg-Hub/refs/heads/main/source.lua"))()
+local Yqantg = loadstring(game:HttpGet("https://raw.githubusercontent.com/anhyeeuemnhieulam-ai/Test-Library/refs/heads/main/source.lua"))()
 -- local file instead:  loadstring(readfile("Yqantg/source.lua"))()
 
 local LocalPlayer = game:GetService("Players").LocalPlayer
