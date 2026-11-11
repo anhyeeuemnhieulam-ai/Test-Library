@@ -1,6 +1,6 @@
 --[[ Yqantg Hub · example.lua — one of every component the library has ]]
 
-local Yqantg = loadstring(game:HttpGet("https://raw.githubusercontent.com/anhyeeuemnhieulam-ai/Test-Library/refs/heads/main/source.lua"))()
+local Yqantg = loadstring(game:HttpGet("https://raw.githubusercontent.com/anhyeeuemnhieulam-ai/Yqantg-Hub/refs/heads/main/source.lua"))()
 -- local file instead:  loadstring(readfile("Yqantg/source.lua"))()
 
 local LocalPlayer = game:GetService("Players").LocalPlayer
@@ -22,13 +22,6 @@ local Window = Yqantg:CreateWindow({
     Dust         = true,                                   -- floating space-dust particles behind the content
     Background   = { Image = "anime", Transparency = 0.6 },-- image id | url | "anime" ; 0 = solid, 1 = hidden
     -- Background = { Image = 1234567890, Transparency = 0.5 },
-    -- anime girl sitting on the top edge of the window (click her = she hops)
-    Mascot       = {
-        Image  = "https://raw.githubusercontent.com/anhyeeuemnhieulam-ai/makingkiba/refs/heads/main/2770-removebg-preview.png",
-        Side   = "PeekLeft",   -- hides behind the left edge and peeks out ("Left" / "Center" / "Right" = sits on top edge)
-        Size   = 150, Offset = 40,
-    },
-    -- Mascot    = { Image = 1234567890, Cutout = true },   -- transparent PNG / decal id, no frame
 })
 -- later:  Window:SetBackground(id, 0.4)   Window:SetBackgroundTransparency(0.7)   Window:SetBackground(nil)
 
