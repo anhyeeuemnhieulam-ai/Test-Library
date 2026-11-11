@@ -4722,59 +4722,55 @@ function Yqantg:CreateWindow(cfg)
         end)
     end
 
-    -- mascot that sits on the top edge of the window (anime girl / any image)
-    -- Window:AddMascot({ Image = "anime" | id | url, Size = 84, Side = "Right"|"Left"|"Center", Offset = 24,
-    --                    Cutout = false })   -- Cutout = true: transparent PNG, no frame; false: sticker frame
-    -- Click her and she hops. Window:RemoveMascot() removes it.
-    function Window:AddMascot(m)
-        m = m or {}
-        Window:RemoveMascot()
-        local sz   = m.Size or 84
-        local side = m.Side or "Right"
-        local off  = m.Offset or 28
-        local ax   = side == "Left" and 0 or (side == "Center" and .5 or 1)
-        local px   = side == "Left" and off or (side == "Center" and 0 or -off)
+    -- BUILT-IN mascot (locked: not configurable from example / scripts).
+    -- Anime girl peeks out from behind the LEFT edge of the window, no frame / no border,
+    -- and moves with the UI: parallax with the cursor, lift while dragging, bob when minimized.
+    -- Click her and she hops.
+    local MASCOT = {
+        Image = "https://raw.githubusercontent.com/anhyeeuemnhieulam-ai/makingkiba/refs/heads/main/2770-removebg-preview.png",
+        Size  = 150,   -- picture size
+        Show  = 100,   -- how many px stick out of the left edge (rest hides behind the window)
+        Y     = 64,    -- distance from the window's top edge
+    }
+    do
+        local sz, show = MASCOT.Size, MASCOT.Show
         local holder = create("Frame", {
-            Name = "Mascot", AnchorPoint = Vector2.new(ax == 1 and 1 or (ax == 0 and 0 or .5), 1),
-            Position = UDim2.new(ax, px, 0, 4), Size = UDim2.fromOffset(sz, sz), BackgroundTransparency = 1, ZIndex = 30, Parent = Root,
+            Name = "Mascot", AnchorPoint = Vector2.new(0, 0),
+            Position = UDim2.fromOffset(-show, MASCOT.Y), Size = UDim2.fromOffset(sz, sz),
+            BackgroundTransparency = 1, ZIndex = 1, Parent = Root,   -- below the window face (ZIndex 2) = peeks from behind
         })
         local pic = create("ImageButton", {
             Name = "Pic", AnchorPoint = Vector2.new(.5, 1), Position = UDim2.fromScale(.5, 1), Size = UDim2.fromScale(1, 1),
-            BackgroundTransparency = 1, AutoButtonColor = false, ImageTransparency = 1, ScaleType = Enum.ScaleType.Crop,
-            ZIndex = 31, Parent = holder,
+            BackgroundTransparency = 1, AutoButtonColor = false, ImageTransparency = 1,
+            ScaleType = Enum.ScaleType.Fit, BorderSizePixel = 0, ZIndex = 1, Parent = holder,   -- no corner, no stroke
         })
-        if not m.Cutout then
-            pic.ScaleType = Enum.ScaleType.Crop
-            corner(pic, math.floor(sz * 0.28))
-            stroke(pic, "Accent", 2, 0.1)
-        else
-            pic.ScaleType = Enum.ScaleType.Fit
-        end
-        -- soft shadow "sitting" on the edge
-        local seat = create("Frame", {
-            AnchorPoint = Vector2.new(.5, .5), Position = UDim2.new(.5, 0, 1, 2), Size = UDim2.fromOffset(sz * 0.7, 5),
-            BackgroundColor3 = Color3.new(0, 0, 0), BackgroundTransparency = 0.6, BorderSizePixel = 0, ZIndex = 29, Parent = holder,
-        })
-        corner(seat, 3)
-
-        Yqantg:_image(m.Image == nil and "anime" or m.Image, function(asset)
+        Yqantg:_image(MASCOT.Image, function(asset)
             if not pic.Parent then return end
             pic.Image = asset
             tween(pic, 0.5, { ImageTransparency = 0 })
         end)
 
-        -- idle: gentle breathing + sway, blink-like squish every few seconds
         local hop = 0
-        local h = animate(holder, function(t)
-            local breathe = math.sin(t * 2.2) * 0.025
-            local sway = math.sin(t * 1.1) * 2.5
-            pic.Rotation = sway
-            local sy = 1 + breathe
-            local squish = (t % 4.5) < 0.12 and 0.92 or 1
-            pic.Size = UDim2.new(1, 0, sy * squish, 0)
+        animate(holder, function(t)
+            local k = Yqantg.Depth
+            -- same motion as the UI layers: slides against the cursor + lifts while dragging
+            local ox = -par.x * 12 * k
+            local oy = -par.y * 8 * k - liftV.Value * 0.6 * k
+            local rot = 0
+            -- same bob as the minimized window
+            if Window.Minimized then
+                oy = oy + math.sin(t * 2.2) * 3
+                rot = math.sin(t * 1.6) * 1.4
+            end
+            holder.Position = UDim2.fromOffset(-show + ox, MASCOT.Y + oy)
+            holder.Rotation = rot
+            holder.Visible = not Window.Minimized
+            -- idle breathing
+            pic.Rotation = math.sin(t * 1.1) * 2
+            pic.Size = UDim2.new(1, 0, 1 + math.sin(t * 2.2) * 0.025, 0)
             if hop > 0 then
                 hop = math.max(0, hop - 0.12)
-                pic.Position = UDim2.new(.5, 0, 1, -math.sin((1 - hop) * math.pi) * sz * 0.35)
+                pic.Position = UDim2.new(.5, 0, 1, -math.sin((1 - hop) * math.pi) * sz * 0.25)
             else
                 pic.Position = UDim2.fromScale(.5, 1)
             end
@@ -4782,12 +4778,6 @@ function Yqantg:CreateWindow(cfg)
         pic.MouseButton1Click:Connect(function()
             if hop <= 0 then hop = 1; Yqantg:_sfx("Click") end
         end)
-        Window._mascot = { holder = holder, h = h }
-        return Window._mascot
-    end
-    function Window:RemoveMascot()
-        local mm = Window._mascot
-        if mm then mm.h.Disconnect(); mm.holder:Destroy(); Window._mascot = nil end
     end
 
     minBtn.MouseButton1Click:Connect(function() Window:Minimize() end)
@@ -5110,9 +5100,6 @@ function Yqantg:CreateWindow(cfg)
 
     -- entrance: same 3D choreography as re-opening the window
     Window.Root = Root
-    if cfg.Mascot then
-        Window:AddMascot(type(cfg.Mascot) == "table" and cfg.Mascot or { Image = "anime" })
-    end
     intro()
 
     return Window
