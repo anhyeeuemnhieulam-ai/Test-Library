@@ -3531,6 +3531,27 @@ end
 ----------------------------------------------------------------------
 -- Tab
 ----------------------------------------------------------------------
+-- ===== BUILT-IN INFO TAB (locked) =====================================================
+-- The library always creates its own "Info" tab (profile / owner / YouTube / Discord / avatar / stats).
+-- Scripts cannot edit it, and anything that duplicates it is swallowed:
+--   * Window:AddTab("Info") (or "Information")  -> ignored (a ghost tab that accepts any call and shows nothing)
+--   * info cards (AddProfile / AddOwner / AddSocial / AddStats / AddAvatar3D / AddOverview) on any other tab -> ignored
+local SEAL = { build = false }
+local function ghost()
+    local g
+    g = setmetatable({}, { __index = function(_, k) if k == "Value" then return nil end return function() return g end end })
+    return g
+end
+for _, m in ipairs({ "AddProfile", "AddOwner", "AddSocial", "AddStats", "AddAvatar3D", "AddOverview" }) do
+    local orig = Section[m]
+    if orig then
+        Section[m] = function(self, ...)
+            if SEAL.build then return orig(self, ...) end
+            return ghost()   -- the source's Info tab already shows this
+        end
+    end
+end
+
 local Tab = {}
 Tab.__index = Tab
 
@@ -3551,6 +3572,7 @@ function Tab:_cascade(delay0)
 end
 
 function Tab:AddSection(o)
+    if self._sealed and not SEAL.build then return ghost() end
     if type(o) == "string" then o = { Name = o } end
     o = o or {}
     self._sectionCount = (self._sectionCount or 0) + 1
@@ -4722,29 +4744,33 @@ function Yqantg:CreateWindow(cfg)
         end)
     end
 
-    -- BUILT-IN mascot (locked: not configurable from example / scripts).
-    -- Anime girl peeks out from behind the LEFT edge of the window, no frame / no border,
-    -- and moves with the UI: parallax with the cursor, lift while dragging, bob when minimized.
-    -- Click her and she hops.
-    local MASCOT = {
-        Image = "https://raw.githubusercontent.com/anhyeeuemnhieulam-ai/makingkiba/refs/heads/main/2770-removebg-preview.png",
-        Size  = 150,   -- picture size
-        Show  = 100,   -- how many px stick out of the left edge (rest hides behind the window)
-        Y     = 64,    -- distance from the window's top edge
+    -- BUILT-IN decorations (locked: not configurable from example / scripts).
+    --  1) anime girl peeking from behind the LEFT edge of the window
+    --  2) white mask sitting on the BOTTOM-LEFT corner (in front of the window)
+    -- No frame / no border. They move with the UI: parallax with the cursor, lift while dragging,
+    -- bob when minimized (then hidden). Click one and it hops.
+    local DECOR = {
+        {   -- anime girl
+            Image = "https://raw.githubusercontent.com/anhyeeuemnhieulam-ai/makingkiba/refs/heads/main/2770-removebg-preview.png",
+            W = 150, H = 150, Anchor = Vector2.new(0, 0), Pos = UDim2.new(0, -100, 0, 64), Z = 1, Par = 1,
+        },
+        {   -- white mask, bottom-left corner
+            Image = "https://raw.githubusercontent.com/anhyeeuemnhieulam-ai/makingkiba/refs/heads/main/IMG_20261112_075530.png",
+            W = 66, H = 100, Anchor = Vector2.new(0, 1), Pos = UDim2.new(0, -24, 1, 6), Z = 3, Par = 1.3,   -- W~H*0.66 so no empty padding: hugs the corner
+        },
     }
-    do
-        local sz, show = MASCOT.Size, MASCOT.Show
+    for _, def in ipairs(DECOR) do
+        local sz = def.H
         local holder = create("Frame", {
-            Name = "Mascot", AnchorPoint = Vector2.new(0, 0),
-            Position = UDim2.fromOffset(-show, MASCOT.Y), Size = UDim2.fromOffset(sz, sz),
-            BackgroundTransparency = 1, ZIndex = 1, Parent = Root,   -- below the window face (ZIndex 2) = peeks from behind
+            Name = "Decor", AnchorPoint = def.Anchor, Position = def.Pos, Size = UDim2.fromOffset(def.W, def.H),
+            BackgroundTransparency = 1, ZIndex = def.Z, Parent = Root,   -- Z 1 = behind the window face (peeks out), Z 3 = in front
         })
         local pic = create("ImageButton", {
             Name = "Pic", AnchorPoint = Vector2.new(.5, 1), Position = UDim2.fromScale(.5, 1), Size = UDim2.fromScale(1, 1),
             BackgroundTransparency = 1, AutoButtonColor = false, ImageTransparency = 1,
-            ScaleType = Enum.ScaleType.Fit, BorderSizePixel = 0, ZIndex = 1, Parent = holder,   -- no corner, no stroke
+            ScaleType = Enum.ScaleType.Fit, BorderSizePixel = 0, ZIndex = def.Z, Parent = holder,   -- no corner, no stroke
         })
-        Yqantg:_image(MASCOT.Image, function(asset)
+        Yqantg:_image(def.Image, function(asset)
             if not pic.Parent then return end
             pic.Image = asset
             tween(pic, 0.5, { ImageTransparency = 0 })
@@ -4752,7 +4778,7 @@ function Yqantg:CreateWindow(cfg)
 
         local hop = 0
         animate(holder, function(t)
-            local k = Yqantg.Depth
+            local k = Yqantg.Depth * def.Par
             -- same motion as the UI layers: slides against the cursor + lifts while dragging
             local ox = -par.x * 12 * k
             local oy = -par.y * 8 * k - liftV.Value * 0.6 * k
@@ -4762,7 +4788,7 @@ function Yqantg:CreateWindow(cfg)
                 oy = oy + math.sin(t * 2.2) * 3
                 rot = math.sin(t * 1.6) * 1.4
             end
-            holder.Position = UDim2.fromOffset(-show + ox, MASCOT.Y + oy)
+            holder.Position = UDim2.new(def.Pos.X.Scale, def.Pos.X.Offset + ox, def.Pos.Y.Scale, def.Pos.Y.Offset + oy)
             holder.Rotation = rot
             holder.Visible = not Window.Minimized
             -- idle breathing
@@ -4778,6 +4804,87 @@ function Yqantg:CreateWindow(cfg)
         pic.MouseButton1Click:Connect(function()
             if hop <= 0 then hop = 1; Yqantg:_sfx("Click") end
         end)
+    end
+
+    -- MINIMIZE ART: when the window collapses to the floating bar (the - button), a pretty image
+    -- rises out from BEHIND the bar with a pop + glow, then bobs / tilts / lifts exactly like the UI.
+    do
+        local ART_URL = "https://raw.githubusercontent.com/anhyeeuemnhieulam-ai/makingkiba/refs/heads/main/2854-removebg-preview.png"
+        local ART_W, ART_H = 300, 300
+        local restY = TOP * 0.62            -- bottom edge of the art sits inside the bar (bar hides it)
+        local hiddenY = TOP + 40            -- start low, fully tucked behind the bar
+
+        local holder = create("Frame", {
+            Name = "MinArt", AnchorPoint = Vector2.new(.5, 1), Position = UDim2.new(.5, 0, 0, hiddenY),
+            Size = UDim2.fromOffset(ART_W, ART_H), BackgroundTransparency = 1, Visible = false,
+            ZIndex = 0, Parent = Root,   -- Z 0 = behind slabs + face, so the UI covers its lower part
+        })
+        local glow = create("ImageLabel", {
+            Name = "Glow", BackgroundTransparency = 1, Image = SHADOW_IMG, ImageColor3 = WHITE,
+            ImageTransparency = 1, ScaleType = Enum.ScaleType.Slice, SliceCenter = Rect.new(49, 49, 450, 450),
+            AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .55), Size = UDim2.fromScale(1.1, 1.0),
+            ZIndex = 0, Parent = holder,
+        })
+        local pic = create("ImageLabel", {
+            Name = "Pic", BackgroundTransparency = 1, ImageTransparency = 1, ScaleType = Enum.ScaleType.Fit,
+            AnchorPoint = Vector2.new(.5, 1), Position = UDim2.fromScale(.5, 1), Size = UDim2.fromScale(1, 1),
+            ZIndex = 1, Parent = holder,
+        })
+        local picScale = create("UIScale", { Scale = 0.5, Parent = pic })
+        local loaded = false
+        Yqantg:_image(ART_URL, function(asset)
+            if not pic.Parent then return end
+            pic.Image = asset; loaded = true
+        end)
+
+        local shown, offAt = false, 0
+        local function artIn()
+            shown = true
+            holder.Visible = true
+            holder.Position = UDim2.new(.5, 0, 0, hiddenY)
+            pic.ImageTransparency = 1; glow.ImageTransparency = 1; picScale.Scale = 0.5; pic.Rotation = -12
+            task.delay(0.35, function()          -- wait until the bar has collapsed, then rise from behind it
+                if not shown then return end
+                tween(holder, 0.7, { Position = UDim2.new(.5, 0, 0, restY) }, Enum.EasingStyle.Back)
+                tween(picScale, 0.75, { Scale = 1 }, Enum.EasingStyle.Back)
+                tween(pic, 0.45, { ImageTransparency = 0 }, Enum.EasingStyle.Quad)
+                tween(glow, 0.6, { ImageTransparency = 0.7 }, Enum.EasingStyle.Quad)
+            end)
+        end
+        local function artOut()
+            shown = false; offAt = os.clock()
+            tween(holder, 0.35, { Position = UDim2.new(.5, 0, 0, hiddenY) }, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+            tween(picScale, 0.3, { Scale = 0.6 }, Enum.EasingStyle.Quad)
+            tween(pic, 0.3, { ImageTransparency = 1 }, Enum.EasingStyle.Quad)
+            tween(glow, 0.3, { ImageTransparency = 1 }, Enum.EasingStyle.Quad)
+            task.delay(0.4, function() if not shown then holder.Visible = false end end)
+        end
+
+        local was = false
+        animate(holder, function(t)
+            if Window.Minimized ~= was then
+                was = Window.Minimized
+                if was then artIn() else artOut() end
+            end
+            if not holder.Visible then return end
+            local k = Yqantg.Depth
+            -- same motion as the UI: parallax against the cursor + lift while dragging + minimized bob
+            local ox = -par.x * 12 * k
+            local oy = -par.y * 8 * k - liftV.Value * 0.6 * k
+            local rot = 0
+            if Window.Minimized then
+                oy = oy + math.sin(t * 2.2) * 3
+                rot = math.sin(t * 1.6) * 1.4
+            end
+            holder.AnchorPoint = Vector2.new(.5 - ox / ART_W, 1)
+            holder.Rotation = rot
+            -- idle breathing on the image itself + pulsing glow
+            if shown then
+                pic.Rotation = math.sin(t * 1.3) * 2.5
+                pic.Position = UDim2.new(.5, 0, 1, oy + math.sin(t * 2.6) * 4)
+                glow.ImageTransparency = 0.62 + math.sin(t * 2.0) * 0.1
+            end
+        end, function() return Window.Visible end)
     end
 
     minBtn.MouseButton1Click:Connect(function() Window:Minimize() end)
@@ -4900,6 +5007,10 @@ function Yqantg:CreateWindow(cfg)
 
     function Window:AddTab(o)
         if type(o) == "string" then o = { Name = o } end
+        if not SEAL.build and type(o) == "table" then
+            local n = tostring(o.Name or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
+            if n == "info" or n == "information" then return ghost() end   -- only the source's Info tab may exist
+        end
         local tab = setmetatable({ Name = o.Name or "Tab", Locked = o.Locked == true, Window = Window, Index = #Window.Tabs + 1, Fit = o.Fit }, Tab)
 
         local b = create("TextButton", {
@@ -5096,6 +5207,19 @@ function Yqantg:CreateWindow(cfg)
         else
             Window:SetBackground(bg)
         end
+    end
+
+    -- built-in Info tab: always first, always shown, locked against edits from scripts
+    do
+        SEAL.build = true
+        local infoTab = Window:AddTab({ Name = "Info" })
+        local ic = infoTab:AddSection({ Side = "Full", NoHeader = true })
+        ic:AddProfile()
+        ic:AddOwner({ Name = "Yqantg Hub", Subtitle = "Official owner", Link = "https://github.com/anhyeeuemnhieulam-ai/Yqantg-Hub" })
+        ic:AddAvatar3D({ Height = 150, Speed = 40 })
+        ic:AddStats()
+        infoTab._sealed = true
+        SEAL.build = false
     end
 
     -- entrance: same 3D choreography as re-opening the window
