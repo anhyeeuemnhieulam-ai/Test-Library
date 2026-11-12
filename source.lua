@@ -4806,102 +4806,117 @@ function Yqantg:CreateWindow(cfg)
         end)
     end
 
-    -- MINIMIZE ART: when the window collapses to the floating bar (the - button), a pretty image
-    -- rises out from BEHIND the bar with a pop + glow, then bobs / tilts / lifts exactly like the UI.
+    -- MINIMIZE SNAKE: when the window collapses to the floating bar (the - button) a snake made of
+    -- 3 cut-out pieces coils around it: tail rises from BEHIND the bar, the body slides in IN FRONT
+    -- (crossing the bar like a coil), the head rises from behind on the right. Every piece bobs / tilts /
+    -- lifts exactly like the UI, plus a small phase-shifted wave so the snake looks alive.
     do
-        local ART_URL = "https://raw.githubusercontent.com/anhyeeuemnhieulam-ai/Test-Library/refs/heads/main/lol.png"
-        if cfg.MinArt ~= nil then ART_URL = cfg.MinArt end   -- optional override: url / asset id
-        local ART_W = fs.X.Offset + 40                       -- the art is a wide ornament: match the bar width
-        local ART_H = math.floor(ART_W * 0.42)
-        local restY = TOP * 0.95            -- bottom edge of the art sits inside the bar (bar hides it)
-        local hiddenY = TOP + 40            -- start low, fully tucked behind the bar
+        local BASE = "https://raw.githubusercontent.com/anhyeeuemnhieulam-ai/Test-Library/refs/heads/main/"
+        local urls = (type(cfg.MinArt) == "table" and cfg.MinArt) or {
+            BASE .. "2892-removebg-preview.png",   -- 1 tail
+            BASE .. "2895-removebg-preview.png",   -- 2 body
+            BASE .. "2896-removebg-preview.png",   -- 3 head
+        }
+        local S = fs.X.Offset / 600
+        -- x / y: px from the bar centre / bar top (y = BOTTOM edge of the piece), rot in degrees, z 0 = behind the bar, 3 = in front
+        -- fx / fy: where the piece starts from (offset) before it slides into place
+        local PIECES = {
+            { name = "Tail", W = 120, H = 190, x = -195, y = TOP * 0.9,  rot = -7, z = 0, fx = 0,    fy = 120, delay = 0.30 },
+            { name = "Body", W = 320, H = 140, x = -5,   y = TOP + 32,   rot = -3, z = 3, fx = -150, fy = 30,  delay = 0.50 },
+            { name = "Head", W = 170, H = 170, x = 190,  y = TOP * 0.9,  rot = 6,  z = 0, fx = 0,    fy = 130, delay = 0.72 },
+        }
+        local parts, okCount, doneCount = {}, 0, 0
+        for i, def in ipairs(PIECES) do
+            local holder = create("Frame", {
+                Name = "MinSnake" .. def.name, AnchorPoint = Vector2.new(.5, 1),
+                Position = UDim2.new(.5, def.x * S, 0, def.y), Size = UDim2.fromOffset(def.W * S, def.H * S),
+                BackgroundTransparency = 1, Visible = false, ZIndex = def.z, Parent = Root,
+            })
+            local pic = create("ImageLabel", {
+                Name = "Pic", BackgroundTransparency = 1, ImageTransparency = 1, ScaleType = Enum.ScaleType.Fit,
+                AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromScale(1, 1),
+                ZIndex = 1, Parent = holder,
+            })
+            local sc = create("UIScale", { Scale = 0.6, Parent = pic })
+            local ap = create("NumberValue", { Value = 0, Parent = holder })   -- 0 = hidden, 1 = in place
+            parts[i] = { holder = holder, pic = pic, sc = sc, ap = ap, def = def }
 
-        local holder = create("Frame", {
-            Name = "MinArt", AnchorPoint = Vector2.new(.5, 1), Position = UDim2.new(.5, 0, 0, hiddenY),
-            Size = UDim2.fromOffset(ART_W, ART_H), BackgroundTransparency = 1, Visible = false,
-            ZIndex = 0, Parent = Root,   -- Z 0 = behind slabs + face, so the UI covers its lower part
-        })
-        local glow = create("ImageLabel", {
-            Name = "Glow", BackgroundTransparency = 1, Image = SHADOW_IMG, ImageColor3 = WHITE,
-            ImageTransparency = 1, ScaleType = Enum.ScaleType.Slice, SliceCenter = Rect.new(49, 49, 450, 450),
-            AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .55), Size = UDim2.fromScale(1.1, 1.0),
-            ZIndex = 0, Parent = holder,
-        })
-        local pic = create("ImageLabel", {
-            Name = "Pic", BackgroundTransparency = 1, ImageTransparency = 1, ScaleType = Enum.ScaleType.Fit,
-            AnchorPoint = Vector2.new(.5, 1), Position = UDim2.fromScale(.5, 1), Size = UDim2.fromScale(1, 1),
-            ZIndex = 1, Parent = holder,
-        })
-        local picScale = create("UIScale", { Scale = 0.5, Parent = pic })
-        local loaded = false
-        task.defer(function() pcall(function() Yqantg:Notify({ Title = "MinArt", Content = "Downloading image...", Duration = 2 }) end) end)
-        task.spawn(function()
-            for attempt = 1, 6 do                 -- retry: the first download can fail / be slow
-                if loaded or not pic.Parent then return end
-                Yqantg:_image(ART_URL, function(asset)
-                    if not pic.Parent then return end
-                    pic.Image = asset; loaded = true
-                    pcall(function() Yqantg:Notify({ Title = "MinArt", Content = "Image downloaded OK", Duration = 3 }) end)
-                end)
-                local w = 0
-                while not loaded and w < 6 and pic.Parent do task.wait(0.5); w = w + 0.5 end
-            end
-            if not loaded then pcall(function() Yqantg:Notify({ Title = "MinArt", Content = "Image download FAILED", Duration = 6 }) end) end
-        end)
-
-        local shown, offAt = false, 0
-        local function artIn()
-            shown = true
-            holder.Visible = true
-            holder.Position = UDim2.new(.5, 0, 0, hiddenY)
-            pic.ImageTransparency = 1; glow.ImageTransparency = 1; picScale.Scale = 0.5; pic.Rotation = -12
-            task.delay(0.35, function()          -- wait until the bar has collapsed, then rise from behind it
-                if not shown then return end
-                tween(holder, 0.7, { Position = UDim2.new(.5, 0, 0, restY) }, Enum.EasingStyle.Back)
-                tween(picScale, 0.75, { Scale = 1 }, Enum.EasingStyle.Back)
-                tween(pic, 0.45, { ImageTransparency = 0 }, Enum.EasingStyle.Quad)
-                tween(glow, 0.6, { ImageTransparency = 0.7 }, Enum.EasingStyle.Quad)
+            local loaded = false
+            task.spawn(function()
+                for _ = 1, 6 do                      -- retry: first download can fail / be slow
+                    if loaded or not pic.Parent then break end
+                    Yqantg:_image(urls[i], function(asset)
+                        if not pic.Parent then return end
+                        pic.Image = asset; loaded = true
+                    end)
+                    local w = 0
+                    while not loaded and w < 6 and pic.Parent do task.wait(0.5); w = w + 0.5 end
+                end
+                doneCount = doneCount + 1
+                if loaded then okCount = okCount + 1 end
+                if doneCount == #PIECES then
+                    pcall(function()
+                        Yqantg:Notify({ Title = "MinSnake", Content = okCount .. "/" .. #PIECES .. " images loaded", Duration = 3 })
+                    end)
+                end
             end)
         end
+
+        local shown = false
+        local function artIn()
+            shown = true
+            for _, p in ipairs(parts) do
+                p.holder.Visible = true
+                p.ap.Value = 0; p.pic.ImageTransparency = 1; p.sc.Scale = 0.6
+                task.delay(p.def.delay, function()   -- bar collapses first, then tail -> body -> head
+                    if not shown then return end
+                    tween(p.ap, 0.8, { Value = 1 }, Enum.EasingStyle.Back)
+                    tween(p.sc, 0.8, { Scale = 1 }, Enum.EasingStyle.Back)
+                    tween(p.pic, 0.4, { ImageTransparency = 0 }, Enum.EasingStyle.Quad)
+                end)
+            end
+        end
         local function artOut()
-            shown = false; offAt = os.clock()
-            tween(holder, 0.35, { Position = UDim2.new(.5, 0, 0, hiddenY) }, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
-            tween(picScale, 0.3, { Scale = 0.6 }, Enum.EasingStyle.Quad)
-            tween(pic, 0.3, { ImageTransparency = 1 }, Enum.EasingStyle.Quad)
-            tween(glow, 0.3, { ImageTransparency = 1 }, Enum.EasingStyle.Quad)
-            task.delay(0.4, function() if not shown then holder.Visible = false end end)
+            shown = false
+            for _, p in ipairs(parts) do
+                tween(p.ap, 0.35, { Value = 0 }, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+                tween(p.sc, 0.3, { Scale = 0.6 }, Enum.EasingStyle.Quad)
+                tween(p.pic, 0.3, { ImageTransparency = 1 }, Enum.EasingStyle.Quad)
+                task.delay(0.4, function() if not shown then p.holder.Visible = false end end)
+            end
         end
 
         local was, errd = false, false
-        animate(holder, function(t)
-          local ok, err = pcall(function()
-            if Window.Minimized ~= was then
-                was = Window.Minimized
-                if was then artIn() else artOut() end
+        animate(parts[1].holder, function(t)
+            local ok, err = pcall(function()
+                if Window.Minimized ~= was then
+                    was = Window.Minimized
+                    if was then artIn() else artOut() end
+                end
+                local k = Yqantg.Depth
+                -- same motion as the UI: parallax against the cursor + lift while dragging + minimized bob
+                local ox = -par.x * 12 * k
+                local oy = -par.y * 8 * k - liftV.Value * 0.6 * k
+                local rot = 0
+                if Window.Minimized then
+                    oy = oy + math.sin(t * 2.2) * 3
+                    rot = math.sin(t * 1.6) * 1.4
+                end
+                for i, p in ipairs(parts) do
+                    if p.holder.Visible then
+                        local d, a = p.def, p.ap.Value
+                        local wave = shown and math.sin(t * 2.2 + i * 0.9) * 3 or 0     -- snake ripple
+                        p.holder.Position = UDim2.new(.5, (d.x + d.fx * (1 - a)) * S + ox * (0.8 + i * 0.1),
+                            0, d.y + d.fy * (1 - a) + oy + wave)
+                        p.holder.Rotation = d.rot + rot
+                        if shown then p.pic.Rotation = math.sin(t * 1.3 + i * 0.8) * 2.5 end
+                    end
+                end
+            end)
+            if not ok and not errd then
+                errd = true
+                pcall(function() Yqantg:Notify({ Title = "MinSnake error", Content = tostring(err):sub(1, 90), Duration = 8 }) end)
             end
-            if not holder.Visible then return end
-            local k = Yqantg.Depth
-            -- same motion as the UI: parallax against the cursor + lift while dragging + minimized bob
-            local ox = -par.x * 12 * k
-            local oy = -par.y * 8 * k - liftV.Value * 0.6 * k
-            local rot = 0
-            if Window.Minimized then
-                oy = oy + math.sin(t * 2.2) * 3
-                rot = math.sin(t * 1.6) * 1.4
-            end
-            holder.AnchorPoint = Vector2.new(.5 - ox / ART_W, 1)
-            holder.Rotation = rot
-            -- idle breathing on the image itself + pulsing glow
-            if shown then
-                pic.Rotation = math.sin(t * 1.3) * 2.5
-                pic.Position = UDim2.new(.5, 0, 1, oy + math.sin(t * 2.6) * 4)
-                glow.ImageTransparency = 0.62 + math.sin(t * 2.0) * 0.1
-            end
-          end)
-          if not ok and not errd then
-            errd = true
-            pcall(function() Yqantg:Notify({ Title = "MinArt error", Content = tostring(err):sub(1, 90), Duration = 8 }) end)
-          end
         end, function() return Window.Visible end)
     end
 
