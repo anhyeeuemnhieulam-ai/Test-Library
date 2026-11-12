@@ -4809,7 +4809,7 @@ function Yqantg:CreateWindow(cfg)
     -- MINIMIZE ART: when the window collapses to the floating bar (the - button), a pretty image
     -- rises out from BEHIND the bar with a pop + glow, then bobs / tilts / lifts exactly like the UI.
     do
-        local ART_URL = "https://raw.githubusercontent.com/anhyeeuemnhieulam-ai/makingkiba/refs/heads/main/2854-removebg-preview.png"
+        local ART_URL = "https://raw.githubusercontent.com/anhyeeuemnhieulam-ai/Test-Library/refs/heads/main/lol.png"
         if cfg.MinArt ~= nil then ART_URL = cfg.MinArt end   -- optional override: url / asset id
         local ART_W = fs.X.Offset + 40                       -- the art is a wide ornament: match the bar width
         local ART_H = math.floor(ART_W * 0.42)
@@ -4834,18 +4834,19 @@ function Yqantg:CreateWindow(cfg)
         })
         local picScale = create("UIScale", { Scale = 0.5, Parent = pic })
         local loaded = false
+        task.defer(function() pcall(function() Yqantg:Notify({ Title = "MinArt", Content = "Downloading image...", Duration = 2 }) end) end)
         task.spawn(function()
             for attempt = 1, 6 do                 -- retry: the first download can fail / be slow
                 if loaded or not pic.Parent then return end
                 Yqantg:_image(ART_URL, function(asset)
                     if not pic.Parent then return end
                     pic.Image = asset; loaded = true
-                    print("[Yqantg] MinArt loaded")
+                    pcall(function() Yqantg:Notify({ Title = "MinArt", Content = "Image downloaded OK", Duration = 3 }) end)
                 end)
                 local w = 0
                 while not loaded and w < 6 and pic.Parent do task.wait(0.5); w = w + 0.5 end
             end
-            if not loaded then warn("[Yqantg] MinArt: could not download " .. ART_URL .. " (needs writefile + getcustomasset + HTTP)") end
+            if not loaded then pcall(function() Yqantg:Notify({ Title = "MinArt", Content = "Image download FAILED", Duration = 6 }) end) end
         end)
 
         local shown, offAt = false, 0
@@ -4871,8 +4872,9 @@ function Yqantg:CreateWindow(cfg)
             task.delay(0.4, function() if not shown then holder.Visible = false end end)
         end
 
-        local was = false
+        local was, errd = false, false
         animate(holder, function(t)
+          local ok, err = pcall(function()
             if Window.Minimized ~= was then
                 was = Window.Minimized
                 if was then artIn() else artOut() end
@@ -4895,6 +4897,11 @@ function Yqantg:CreateWindow(cfg)
                 pic.Position = UDim2.new(.5, 0, 1, oy + math.sin(t * 2.6) * 4)
                 glow.ImageTransparency = 0.62 + math.sin(t * 2.0) * 0.1
             end
+          end)
+          if not ok and not errd then
+            errd = true
+            pcall(function() Yqantg:Notify({ Title = "MinArt error", Content = tostring(err):sub(1, 90), Duration = 8 }) end)
+          end
         end, function() return Window.Visible end)
     end
 
