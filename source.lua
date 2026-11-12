@@ -4806,24 +4806,18 @@ function Yqantg:CreateWindow(cfg)
         end)
     end
 
-    -- MINIMIZE SNAKE: when the window collapses to the floating bar (the - button) a snake made of
-    -- 3 cut-out pieces coils around it: tail rises from BEHIND the bar, the body slides in IN FRONT
-    -- (crossing the bar like a coil), the head rises from behind on the right. Every piece bobs / tilts /
-    -- lifts exactly like the UI, plus a small phase-shifted wave so the snake looks alive.
+    -- MINIMIZE ART: when the window collapses to the floating bar (the - button) a wide lace + snake ornament
+    -- rises from BEHIND the bar and bobs / tilts / lifts exactly like the UI.
     do
-        local BASE = "https://raw.githubusercontent.com/anhyeeuemnhieulam-ai/Test-Library/refs/heads/main/"
-        local urls = (type(cfg.MinArt) == "table" and cfg.MinArt) or {
-            BASE .. "2892-removebg-preview.png",   -- 1 tail
-            BASE .. "2895-removebg-preview.png",   -- 2 body
-            BASE .. "2896-removebg-preview.png",   -- 3 head
+        local urls = {
+            (type(cfg.MinArt) == "string" and cfg.MinArt) or
+            "https://raw.githubusercontent.com/anhyeeuemnhieulam-ai/Test-Library/refs/heads/main/lol.png",
         }
         local S = fs.X.Offset / 600
-        -- x / y: px from the bar centre / bar top (y = BOTTOM edge of the piece), rot in degrees, z 0 = behind the bar, 3 = in front
-        -- fx / fy: where the piece starts from (offset) before it slides into place
+        -- ONE wide ornament (lace + snake) sitting BEHIND the minimized bar: the lace wraps the bar, the snake peeks above it.
+        -- x / y: px from the bar centre / bar top (y = BOTTOM edge of the image), z 0 = behind the bar
         local PIECES = {
-            { name = "Tail", W = 120, H = 190, x = -195, y = TOP * 0.9,  rot = -7, z = 0, fx = 0,    fy = 120, delay = 0.30 },
-            { name = "Body", W = 320, H = 140, x = -5,   y = TOP + 32,   rot = -3, z = 3, fx = -150, fy = 30,  delay = 0.50 },
-            { name = "Head", W = 170, H = 170, x = 190,  y = TOP * 0.9,  rot = 6,  z = 0, fx = 0,    fy = 130, delay = 0.72 },
+            { name = "Art", W = 680, H = 306, x = 0, y = TOP + 26, rot = 0, z = 0, fx = 0, fy = 150, delay = 0.30 },
         }
         local parts, okCount, doneCount = {}, 0, 0
         for i, def in ipairs(PIECES) do
