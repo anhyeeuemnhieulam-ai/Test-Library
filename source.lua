@@ -4810,8 +4810,10 @@ function Yqantg:CreateWindow(cfg)
     -- rises out from BEHIND the bar with a pop + glow, then bobs / tilts / lifts exactly like the UI.
     do
         local ART_URL = "https://raw.githubusercontent.com/anhyeeuemnhieulam-ai/makingkiba/refs/heads/main/2854-removebg-preview.png"
-        local ART_W, ART_H = 300, 300
-        local restY = TOP * 0.62            -- bottom edge of the art sits inside the bar (bar hides it)
+        if cfg.MinArt ~= nil then ART_URL = cfg.MinArt end   -- optional override: url / asset id
+        local ART_W = fs.X.Offset + 40                       -- the art is a wide ornament: match the bar width
+        local ART_H = math.floor(ART_W * 0.42)
+        local restY = TOP * 0.95            -- bottom edge of the art sits inside the bar (bar hides it)
         local hiddenY = TOP + 40            -- start low, fully tucked behind the bar
 
         local holder = create("Frame", {
@@ -4832,9 +4834,18 @@ function Yqantg:CreateWindow(cfg)
         })
         local picScale = create("UIScale", { Scale = 0.5, Parent = pic })
         local loaded = false
-        Yqantg:_image(ART_URL, function(asset)
-            if not pic.Parent then return end
-            pic.Image = asset; loaded = true
+        task.spawn(function()
+            for attempt = 1, 6 do                 -- retry: the first download can fail / be slow
+                if loaded or not pic.Parent then return end
+                Yqantg:_image(ART_URL, function(asset)
+                    if not pic.Parent then return end
+                    pic.Image = asset; loaded = true
+                    print("[Yqantg] MinArt loaded")
+                end)
+                local w = 0
+                while not loaded and w < 6 and pic.Parent do task.wait(0.5); w = w + 0.5 end
+            end
+            if not loaded then warn("[Yqantg] MinArt: could not download " .. ART_URL .. " (needs writefile + getcustomasset + HTTP)") end
         end)
 
         local shown, offAt = false, 0
