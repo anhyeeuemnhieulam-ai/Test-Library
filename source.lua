@@ -4,6 +4,19 @@
     ║  Layered depth · parallax · 3D keycaps · glass    ║
     ╚══════════════════════════════════════════════════╝
 
+    NEW in 3.0 (NEON ANIME edition)
+      • Outer HUD: everything now lives OUTSIDE the window frame too - corner brackets, title plate,
+        status tag, drifting sparks and two anime photo stacks (boy left / girl right, click = shuffle,
+        slow auto-rotate). Off:  Yqantg.Decor = false
+      • Anime pool with GIRL + BOY pictures:  Yqantg.AnimeGender = "Both" | "Girl" | "Boy"
+        own pictures:  Yqantg.AnimeCustom = { Girl = { id|url }, Boy = { id|url } }
+      • Settings > ANIME GALLERY: 6 thumbnails -> tap one to use as background / left card / right card
+      • Config v3: typed text profiles (.yqcfg) + checksum + auto .bak + share codes (YQ3:...)
+        Yqantg:ExportConfig() / Yqantg:ImportConfig(code) / Yqantg:GetConfigInfo(name)
+      • Keybind: keycap + full-row "PRESS A KEY" capture strip with 5 s countdown
+      • New neon-slash Buttons, lit-row Toggles, sharper window / rows / sections, 4 new themes
+        (Kurenai default, Shinobi, Raiden, Oni)
+
     NEW in 2.0 (3D edition)
       • Window = real depth stack: slab layers + soft shadows + mouse parallax
         + specular light that follows the cursor
@@ -281,7 +294,7 @@ do
 end
 
 local Yqantg = {
-    Version      = "2.2.0",
+    Version      = "3.0.0",
     Depth        = 1,        -- 3D intensity (0 = flat, 1 = default, 1.5 = max)
     Parallax     = true,     -- window follows cursor with depth
     BlurEnabled  = true,     -- backdrop blur while a window is open
@@ -291,6 +304,12 @@ local Yqantg = {
     Tiles        = true,     -- consecutive toggles / buttons share a row (2-up tiles)
     AutoLoad     = true,     -- apply the saved auto-load config once the script has built its UI
     BlockInput   = true,     -- sink camera / game input while the pointer is over the UI
+    Decor        = true,     -- outer HUD (photo cards / brackets / sparks outside the window)
+    AnimeGender  = "Both",   -- "Both" | "Girl" | "Boy"
+    AnimeCustom  = { Girl = {}, Boy = {} },  -- your own pictures (rbxassetid / url)
+    GalleryRotate   = true,  -- outer photo cards swap pictures by themselves
+    GalleryInterval = 30,    -- seconds between swaps
+    ConfigPerGame   = false, -- true = profiles are stored per PlaceId
     AnimeIcons   = true,     -- random anime-girl images for notify icons / orb (needs writefile + getcustomasset)
     Icons        = {},       -- Icons.Notify / Icons.Orb = id | url | {list} | false (off) ; nil = random anime
     ImageFolder  = "YqantgUI/img",
@@ -298,7 +317,7 @@ local Yqantg = {
     Flags        = {},
     Options      = {},
     Windows      = {},
-    CurrentTheme = "Onyx",
+    CurrentTheme = "Kurenai",
     ConfigFolder = "YqantgUI",
     _themed  = {},
     _refresh = {},
@@ -445,8 +464,21 @@ Yqantg.Themes = {
         SubText= Color3.fromRGB(124, 168, 164),
     },
 }
+local function th(a, a2, g1, g2, b1, b2, bg, side, panel, el, st, tx, sub)
+    return { Accent = a, Accent2 = a2, Glow1 = g1, Glow2 = g2, Btn1 = b1, Btn2 = b2, Bg = bg, Side = side,
+             Panel = panel, Element = el, Stroke = st, Text = tx, SubText = sub }
+end
+local C = Color3.fromRGB
+Yqantg.Themes.Kurenai = th(C(255, 72, 140), C(150, 70, 255), C(255, 100, 170), C(22, 0, 14), C(170, 30, 90), C(28, 8, 20),
+    C(8, 6, 12), C(13, 9, 18), C(19, 13, 26), C(28, 19, 38), C(84, 42, 98), C(252, 240, 248), C(166, 138, 176))
+Yqantg.Themes.Shinobi = th(C(56, 225, 255), C(88, 110, 255), C(100, 240, 255), C(0, 10, 24), C(20, 90, 150), C(6, 14, 30),
+    C(5, 8, 14), C(9, 13, 22), C(13, 19, 31), C(19, 28, 44), C(34, 74, 116), C(234, 248, 255), C(120, 152, 180))
+Yqantg.Themes.Raiden = th(C(186, 104, 255), C(255, 214, 90), C(215, 150, 255), C(14, 4, 26), C(100, 50, 170), C(18, 10, 32),
+    C(8, 5, 14), C(13, 9, 21), C(19, 14, 30), C(27, 20, 42), C(76, 52, 110), C(246, 240, 255), C(150, 134, 176))
+Yqantg.Themes.Oni = th(C(255, 62, 62), C(255, 150, 40), C(255, 110, 70), C(26, 2, 2), C(160, 28, 28), C(26, 8, 8),
+    C(9, 5, 5), C(15, 8, 8), C(22, 12, 12), C(32, 18, 18), C(96, 44, 40), C(255, 242, 238), C(176, 140, 134))
 -- order shown in Settings > THEME (themes added later by you are appended alphabetically)
-Yqantg.ThemeOrder = { "Onyx", "Steel", "Obsidian", "Eclipse", "Graphite", "Crimson", "Ocean", "Emerald", "Violet", "Sunset", "Sakura", "Gold", "Cyber", "Midnight", "Mint" }
+Yqantg.ThemeOrder = { "Kurenai", "Shinobi", "Raiden", "Oni", "Onyx", "Steel", "Obsidian", "Eclipse", "Graphite", "Crimson", "Ocean", "Emerald", "Violet", "Sunset", "Sakura", "Gold", "Cyber", "Midnight", "Mint" }
 
 -- status = shades of white / grey (the icons tell them apart)
 local Status = {
@@ -610,14 +642,64 @@ function Yqantg:_download(url)
     if ok and asset then imgCache[url] = asset; return asset end
 end
 
-local ANIME_APIS = {
-    { "https://api.waifu.pics/sfw/waifu", function(j) return j.url end },
-    { "https://nekos.best/api/v2/waifu", function(j) return j.results and j.results[1] and j.results[1].url end },
+-- ===== anime pool: GIRL + BOY ======================================================
+-- Yqantg.AnimeGender = "Both" | "Girl" | "Boy"     (filters notify icons / orb / backgrounds)
+-- Yqantg.AnimeCustom = { Girl = { id|url, ... }, Boy = { id|url, ... } }   your own pictures
+--   (rbxassetid / numeric ids work on every executor, urls need writefile + getcustomasset)
+local function nb(j) return j.results and j.results[1] and j.results[1].url end
+local function wp(j) return j.url end
+local ANIME_SRC = {
+    Girl = {
+        { "https://api.waifu.pics/sfw/waifu", wp },
+        { "https://api.waifu.pics/sfw/shinobu", wp },
+        { "https://api.waifu.pics/sfw/megumin", wp },
+        { "https://api.waifu.pics/sfw/neko", wp },
+        { "https://nekos.best/api/v2/waifu", nb },
+        { "https://nekos.best/api/v2/neko", nb },
+        { "https://nekos.best/api/v2/kitsune", nb },
+    },
+    Boy = {
+        { "https://nekos.best/api/v2/husbando", nb },
+    },
 }
-function Yqantg:_randomAnime()
+
+local function resolveGender(self, g)
+    if g == "Girl" or g == "Boy" then return g end
+    local pref = self.AnimeGender
+    if pref == "Girl" or pref == "Boy" then return pref end
+    return (math.random() < 0.5) and "Girl" or "Boy"
+end
+
+local function isDirectId(v)
+    return type(v) == "number" or (type(v) == "string" and (v:match("^%d+$") or v:match("^rbxassetid://")))
+end
+
+-- a custom picture that needs no download (numeric id / rbxassetid)
+local function directCustom(self, g)
+    local list = self.AnimeCustom and self.AnimeCustom[g]
+    if type(list) ~= "table" then return nil end
+    local ids = {}
+    for _, v in ipairs(list) do if isDirectId(v) then ids[#ids + 1] = v end end
+    if #ids == 0 then return nil end
+    local v = ids[math.random(#ids)]
+    if type(v) == "number" or v:match("^%d+$") then return "rbxassetid://" .. v end
+    return v
+end
+
+function Yqantg:_randomAnime(gender)
+    local g = resolveGender(self, gender)
+    local custom = self.AnimeCustom and self.AnimeCustom[g]
+    if type(custom) == "table" and #custom > 0 and math.random() < 0.5 then
+        local url = tostring(custom[math.random(#custom)])
+        if url:match("^https?://") then
+            local a = self:_download(url)
+            if a then return a, g end
+        end
+    end
+    local list = ANIME_SRC[g]
     for _ = 1, 6 do
         if self._unloaded then return nil end
-        local api = ANIME_APIS[math.random(#ANIME_APIS)]
+        local api = list[math.random(#list)]
         local raw = httpGet(api[1])
         if raw then
             local ok, j = pcall(HttpService.JSONDecode, HttpService, raw)
@@ -626,45 +708,73 @@ function Yqantg:_randomAnime()
                 local l = url:lower()
                 if not l:find("%.gif") and not l:find("%.webp") then   -- Roblox can't show those
                     local a = self:_download(url)
-                    if a then return a end
+                    if a then return a, g end
                 end
             end
         end
     end
 end
 
-function Yqantg:_warmPool(n)
+function Yqantg:_warmPool(n, gender)
     if self._warming or not self.AnimeIcons or not Compat.canAssets then return end
     self._warming = true
-    self._pool = self._pool or {}
+    self._pool = self._pool or { Girl = {}, Boy = {} }
+    self._waiters = self._waiters or { Girl = {}, Boy = {} }
     task.spawn(function()
-        for _ = 1, n do
+        local got = 0
+        for i = 1, n do
             if self._unloaded then break end
-            local a = self:_randomAnime()
+            local g = gender
+            if not g then
+                local pref = self.AnimeGender
+                g = (pref == "Girl" or pref == "Boy") and pref or ((i % 2 == 1) and "Girl" or "Boy")
+            end
+            local a = self:_randomAnime(g)
             if a then
-                table.insert(self._pool, a)
-                local w = self._waiters or {}
-                self._waiters = {}
-                for _, cb in ipairs(w) do pcall(cb, self._pool[math.random(#self._pool)]) end
+                got = got + 1
+                local pool = self._pool[g]
+                table.insert(pool, a)
+                if #pool > 24 then table.remove(pool, 1) end
+                local w = self._waiters[g]
+                self._waiters[g] = {}
+                for _, cb in ipairs(w) do pcall(cb, pool[math.random(#pool)]) end
             end
         end
         self._warming = false
+        self._warmFail = (got == 0) and ((self._warmFail or 0) + 1) or 0
+        if not self._unloaded and (self._warmFail or 0) < 3 then
+            for g2, w in pairs(self._waiters) do
+                if #w > 0 then self:_warmPool(2, g2); break end
+            end
+        end
     end)
 end
 
-local function pickAnime(self, cb)
-    if self._pool and #self._pool > 0 then cb(self._pool[math.random(#self._pool)]); return end
-    self._waiters = self._waiters or {}
-    table.insert(self._waiters, cb)
-    self:_warmPool(4)
+local function pickAnime(self, cb, gender)
+    local g = resolveGender(self, gender)
+    local pool = self._pool and self._pool[g]
+    if pool and #pool > 0 then cb(pool[math.random(#pool)]); return end
+    self._waiters = self._waiters or { Girl = {}, Boy = {} }
+    table.insert(self._waiters[g], cb)
+    self:_warmPool(4, g)
 end
 
--- src: number / "123" / "rbxassetid://.." / "https://.." / {list} / nil|"anime" (random anime) / false (none)
+-- src: number / "123" / "rbxassetid://.." / "https://.." / {list}
+--      nil | "anime" (random, follows AnimeGender) / "girl" / "boy" / false (none)
 function Yqantg:_image(src, cb)
     if src == false then return end
     if type(src) == "table" then src = src[math.random(#src)] end
+    local g
     if src == nil or src == true or src == "anime" then
-        if self.AnimeIcons and Compat.canAssets then pickAnime(self, cb) end
+        g = "Both"
+    elseif type(src) == "string" and (src:lower() == "girl" or src:lower() == "boy") then
+        g = (src:lower() == "girl") and "Girl" or "Boy"
+    end
+    if g then
+        g = resolveGender(self, g)
+        local direct = directCustom(self, g)
+        if direct then cb(direct); return end
+        if self.AnimeIcons and Compat.canAssets then pickAnime(self, cb, g) end
         return
     end
     if type(src) == "number" or (type(src) == "string" and src:match("^%d+$")) then
@@ -1611,73 +1721,266 @@ end
 ----------------------------------------------------------------------
 -- Config
 ----------------------------------------------------------------------
-function Yqantg:ListConfigs()
-    local out, seenN = {}, {}
-    do
-        for _, f in ipairs(Compat.listfiles(self.ConfigFolder)) do
-            local n = tostring(f):match("([^/\\]+)%.json$")
-            if n and n ~= "autoload" and not seenN[n] then seenN[n] = true; table.insert(out, n) end
+-- ===== CONFIG v3: typed text profiles ==============================================
+--   YqantgUI/profiles/<name>.yqcfg      one line per flag:  flag|T|value   (T = b n s k c j)
+--   header lines (#YQCFG / #saved / #place / #count / #sum) + checksum, auto .bak backup,
+--   share codes ("YQ3:...") via Yqantg:ExportConfig() / Yqantg:ImportConfig(code),
+--   old .json configs are still listed + loadable.
+--   Yqantg.ConfigPerGame = true  -> profiles are kept per game (PlaceId)
+local CFG_VER, CFG_EXT = 3, ".yqcfg"
+
+local function esc(s)
+    return (tostring(s):gsub("[%%|\r\n]", function(c) return ("%%%02X"):format(c:byte()) end))
+end
+local function unesc(s)
+    return (s:gsub("%%(%x%x)", function(h) return string.char(tonumber(h, 16)) end))
+end
+
+local B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+local B64R = {}
+for i = 1, 64 do B64R[B64:sub(i, i)] = i - 1 end
+local function b64enc(s)
+    local out = {}
+    for i = 1, #s, 3 do
+        local a, b, c = s:byte(i, i + 2)
+        local v = a * 65536 + (b or 0) * 256 + (c or 0)
+        local i1, i2, i3, i4 = math.floor(v / 262144) % 64, math.floor(v / 4096) % 64, math.floor(v / 64) % 64, v % 64
+        out[#out + 1] = B64:sub(i1 + 1, i1 + 1) .. B64:sub(i2 + 1, i2 + 1)
+            .. (b and B64:sub(i3 + 1, i3 + 1) or "=") .. (c and B64:sub(i4 + 1, i4 + 1) or "=")
+    end
+    return table.concat(out)
+end
+local function b64dec(s)
+    s = s:gsub("[^%w%+/=]", "")
+    local out = {}
+    for i = 1, #s, 4 do
+        local c1, c2, c3, c4 = s:sub(i, i), s:sub(i + 1, i + 1), s:sub(i + 2, i + 2), s:sub(i + 3, i + 3)
+        local v = (B64R[c1] or 0) * 262144 + (B64R[c2] or 0) * 4096 + (B64R[c3] or 0) * 64 + (B64R[c4] or 0)
+        out[#out + 1] = string.char(math.floor(v / 65536) % 256)
+        if c3 ~= "=" and c3 ~= "" then out[#out + 1] = string.char(math.floor(v / 256) % 256) end
+        if c4 ~= "=" and c4 ~= "" then out[#out + 1] = string.char(v % 256) end
+    end
+    return table.concat(out)
+end
+
+local function checksum(str)
+    local a, b = 1, 0
+    for i = 1, #str do
+        a = (a + str:byte(i)) % 65521
+        b = (b + a) % 65521
+    end
+    return ("%04x%04x"):format(b, a)
+end
+
+local function encodeValue(v, opt)
+    local tv = typeof(v)
+    if tv == "boolean" then return "b|" .. (v and "1" or "0")
+    elseif tv == "number" then
+        if v ~= v or v == math.huge or v == -math.huge then return nil end
+        return "n|" .. ("%.14g"):format(v)
+    elseif tv == "string" then return "s|" .. esc(v)
+    elseif tv == "EnumItem" then return "k|" .. v.Name
+    elseif tv == "Color3" then return "c|" .. ("%.5f,%.5f,%.5f,%.4f"):format(v.R, v.G, v.B, (opt and tonumber(opt.Alpha)) or 0)
+    elseif tv == "table" then
+        local ok, js = pcall(HttpService.JSONEncode, HttpService, v)
+        if ok then return "j|" .. esc(js) end
+    end
+    return nil
+end
+
+local function decodeValue(t, p)
+    if t == "b" then return p == "1"
+    elseif t == "n" then return tonumber(p)
+    elseif t == "s" then return unesc(p)
+    elseif t == "k" then return Enum.KeyCode[p]
+    elseif t == "c" then
+        local r, g, b, a = p:match("^([^,]+),([^,]+),([^,]+),([^,]+)$")
+        return Color3.new(tonumber(r), tonumber(g), tonumber(b)), tonumber(a)
+    elseif t == "j" then return HttpService:JSONDecode(unesc(p))
+    end
+end
+
+local function parseConfig(text)
+    local meta, vals, body = {}, {}, {}
+    for line in (tostring(text) .. "\n"):gmatch("([^\n]*)\n") do
+        line = line:gsub("\r$", "")
+        if line:sub(1, 1) == "#" then
+            local k, v = line:match("^#(%w+)%s?(.*)$")
+            if k then meta[k] = v end
+        elseif line ~= "" then
+            body[#body + 1] = line
+            local flag, t, p = line:match("^([^|]*)|(%a)|(.*)$")
+            if flag then vals[#vals + 1] = { unesc(flag), t, p } end
         end
     end
+    return meta, vals, table.concat(body, "\n")
+end
+
+local function cfgDir(self)
+    local d = self.ConfigFolder .. "/profiles"
+    if self.ConfigPerGame then d = d .. "/" .. tostring(game.PlaceId) end
+    return d
+end
+
+function Yqantg:_encodeConfig(name)
+    local flags = {}
+    for flag in pairs(self.Flags) do flags[#flags + 1] = tostring(flag) end
+    table.sort(flags)
+    local lines = {}
+    for _, flag in ipairs(flags) do
+        local opt = self.Options[flag]
+        if not (opt and opt.NoSave) then
+            local enc = encodeValue(self.Flags[flag], opt)
+            if enc then lines[#lines + 1] = esc(flag) .. "|" .. enc end
+        end
+    end
+    local body = table.concat(lines, "\n")
+    local head = {
+        "#YQCFG " .. CFG_VER, "#name " .. esc(name or "export"), "#saved " .. os.time(),
+        "#place " .. tostring(game.PlaceId), "#count " .. #lines, "#sum " .. checksum(body),
+    }
+    return table.concat(head, "\n") .. "\n" .. body, #lines
+end
+
+local function applyVals(self, vals)
+    local n = 0
+    for _, e in ipairs(vals) do
+        local opt = self.Options[e[1]]
+        if opt then
+            local ok = pcall(function()
+                local v, alpha = decodeValue(e[2], e[3])
+                if v == nil and e[2] ~= "b" then return end
+                if e[2] == "c" and alpha and alpha > 0 then opt:Set(v, false, alpha) else opt:Set(v) end
+            end)
+            if ok then n = n + 1 end
+        end
+    end
+    return n
+end
+
+-- returns meta, vals, status ("ok" | "corrupt")
+local function readProfile(path)
+    if not Compat.isfile(path) then return nil end
+    local text = Compat.readfile(path)
+    if not text then return nil end
+    local meta, vals, body = parseConfig(text)
+    if meta.sum and meta.sum ~= checksum(body) then return meta, vals, "corrupt" end
+    return meta, vals, "ok"
+end
+
+function Yqantg:ListConfigs()
+    local out, seen = {}, {}
+    local function add(n) if n and n ~= "autoload" and not seen[n] then seen[n] = true; out[#out + 1] = n end end
+    for _, f in ipairs(Compat.listfiles(cfgDir(self))) do add(tostring(f):match("([^/\\]+)%.yqcfg$")) end
+    for _, f in ipairs(Compat.listfiles(self.ConfigFolder)) do add(tostring(f):match("([^/\\]+)%.json$")) end   -- v2 configs
+    table.sort(out)
     return out
+end
+
+function Yqantg:GetConfigInfo(name)
+    if not name then return nil end
+    local path = cfgDir(self) .. "/" .. name .. CFG_EXT
+    local meta = readProfile(path)
+    if meta then
+        return { name = name, saved = tonumber(meta.saved), count = tonumber(meta.count), place = meta.place, legacy = false }
+    end
+    if Compat.isfile(self.ConfigFolder .. "/" .. name .. ".json") then return { name = name, legacy = true } end
 end
 
 function Yqantg:SaveConfig(name)
     if not name or name == "" then return false end
-    local data = {}
-    for flag, v in pairs(self.Flags) do
-        local opt = self.Options[flag]
-        if typeof(v) == "EnumItem" then data[flag] = { __enum = v.Name }
-        elseif typeof(v) == "Color3" then data[flag] = { __c3 = { v.R, v.G, v.B }, a = opt and opt.Alpha }
-        elseif type(v) ~= "userdata" and not (opt and opt.NoSave) then data[flag] = v end
+    name = tostring(name):gsub("[^%w%-%_ %.]", "_")
+    local dir = cfgDir(self)
+    Compat.makefolder(dir)
+    local path = dir .. "/" .. name .. CFG_EXT
+    -- keep the previous version as .bak (used automatically if the new file is ever damaged)
+    if Compat.isfile(path) then
+        local old = Compat.readfile(path)
+        if old then Compat.writefile(path .. ".bak", old) end
     end
-    Compat.makefolder(self.ConfigFolder)
-    local ok = Compat.writefile(self.ConfigFolder .. "/" .. name .. ".json", HttpService:JSONEncode(data))
-    return ok
+    local text = self:_encodeConfig(name)
+    local ok = Compat.writefile(path, text)
+    return ok and name or false
 end
 
 function Yqantg:LoadConfig(name)
     if not name then return false end
-    local path = self.ConfigFolder .. "/" .. name .. ".json"
-    if not Compat.isfile(path) then return false end
-    local ok, data = pcall(function() return HttpService:JSONDecode(Compat.readfile(path)) end)
-    if not ok then return false end
-    for flag, v in pairs(data) do
-        local opt = self.Options[flag]
-        if opt then
-            pcall(function()
-                local alpha
-                if type(v) == "table" and v.__enum then v = Enum.KeyCode[v.__enum]
-                elseif type(v) == "table" and v.__c3 then alpha = tonumber(v.a); v = Color3.new(v.__c3[1], v.__c3[2], v.__c3[3]) end
-                if alpha then opt:Set(v, false, alpha) else opt:Set(v) end
-            end)
-        end
+    local path = cfgDir(self) .. "/" .. name .. CFG_EXT
+    local meta, vals, status = readProfile(path)
+    if status == "corrupt" then
+        local m2, v2, s2 = readProfile(path .. ".bak")
+        if s2 == "ok" then meta, vals, status = m2, v2, s2 end
     end
-    return true
+    if vals and status == "ok" then
+        applyVals(self, vals)
+        return true
+    end
+    -- v2 .json fallback
+    local legacy = self.ConfigFolder .. "/" .. name .. ".json"
+    if Compat.isfile(legacy) then
+        local ok, data = pcall(function() return HttpService:JSONDecode(Compat.readfile(legacy)) end)
+        if not ok or type(data) ~= "table" then return false end
+        for flag, v in pairs(data) do
+            local opt = self.Options[flag]
+            if opt then
+                pcall(function()
+                    local alpha
+                    if type(v) == "table" and v.__enum then v = Enum.KeyCode[v.__enum]
+                    elseif type(v) == "table" and v.__c3 then alpha = tonumber(v.a); v = Color3.new(v.__c3[1], v.__c3[2], v.__c3[3]) end
+                    if alpha then opt:Set(v, false, alpha) else opt:Set(v) end
+                end)
+            end
+        end
+        return true
+    end
+    return false
 end
 
 function Yqantg:DeleteConfig(name)
     if not name then return false end
-    local path = self.ConfigFolder .. "/" .. name .. ".json"
-    if not Compat.isfile(path) then return false end
-    return Compat.delfile(path)
+    local path = cfgDir(self) .. "/" .. name .. CFG_EXT
+    local any = false
+    for _, p in ipairs({ path, path .. ".bak", self.ConfigFolder .. "/" .. name .. ".json" }) do
+        if Compat.isfile(p) then Compat.delfile(p); any = true end
+    end
+    return any
+end
+
+-- share code: "YQ3:" + base64(profile text). Copy it, send it, paste it into ImportConfig.
+function Yqantg:ExportConfig()
+    return "YQ3:" .. b64enc((self:_encodeConfig("shared")))
+end
+
+function Yqantg:ImportConfig(code)
+    if type(code) ~= "string" then return false end
+    code = code:gsub("%s", "")
+    if code:sub(1, 4) ~= "YQ3:" then return false end
+    local ok, text = pcall(b64dec, code:sub(5))
+    if not ok then return false end
+    local meta, vals, body = parseConfig(text)
+    if meta.sum and meta.sum ~= checksum(body) then return false end
+    return applyVals(self, vals) > 0
 end
 
 function Yqantg:SetAutoLoad(name)
-    local path = self.ConfigFolder .. "/autoload.txt"
-    Compat.makefolder(self.ConfigFolder)
+    local dir = cfgDir(self)
+    local path = dir .. "/_autoload"
+    Compat.makefolder(dir)
     if name and name ~= "" then
         return (Compat.writefile(path, name))
     end
     if Compat.isfile(path) then Compat.delfile(path) end
+    local legacy = self.ConfigFolder .. "/autoload.txt"
+    if Compat.isfile(legacy) then Compat.delfile(legacy) end
     return true
 end
 
 function Yqantg:GetAutoLoad()
-    local path = self.ConfigFolder .. "/autoload.txt"
-    if Compat.isfile(path) then
-        local n = Compat.readfile(path)
-        if n and n ~= "" then return n end
+    for _, path in ipairs({ cfgDir(self) .. "/_autoload", self.ConfigFolder .. "/autoload.txt" }) do
+        if Compat.isfile(path) then
+            local n = Compat.readfile(path)
+            if n and n ~= "" then return n end
+        end
     end
 end
 
@@ -1688,7 +1991,6 @@ function Yqantg:LoadAuto()
 end
 
 -- runs LoadAuto once, a moment after the last element was created
--- (every element registers here, so it works whatever order your script builds the UI in)
 function Yqantg:_queueAuto()
     if self._autoDone or self._unloaded or self.AutoLoad == false then return end
     self._autoTok = (self._autoTok or 0) + 1
@@ -1698,9 +2000,9 @@ function Yqantg:_queueAuto()
         local n = self:GetAutoLoad()
         if not n then return end
         if self:LoadAuto() then
-            self:Notify({ Title = "Auto-load", Content = "Loaded config: " .. tostring(n), Type = "Success" })
+            self:Notify({ Title = "Auto-load", Content = "Loaded profile: " .. tostring(n), Type = "Success" })
         else
-            self:Notify({ Title = "Auto-load failed", Content = "Config not found: " .. tostring(n), Type = "Warning" })
+            self:Notify({ Title = "Auto-load failed", Content = "Profile not found: " .. tostring(n), Type = "Warning" })
         end
     end)
 end
@@ -1851,20 +2153,28 @@ local function newRow(section, height)
     })
     bind(row, "BackgroundColor3", "Element")
     row.ClipsDescendants = true
-    corner(row, 10)
+    corner(row, 6)
     local sh = sheen(row, 90, 228)
     local st = stroke(row, "Stroke", 1, 0.66)
     bevelGrad(st)
+    -- HUD speed-lines on the right edge
+    for n = 0, 1 do
+        local sl = create("Frame", {
+            AnchorPoint = Vector2.new(.5, .5), Position = UDim2.new(1, -10 - n * 8, .5, 0), Size = UDim2.new(0, 2 - n, 2, 0),
+            Rotation = 20, BackgroundTransparency = 0.9 + n * 0.04, BorderSizePixel = 0, Parent = row,
+        })
+        bind(sl, "BackgroundColor3", "Accent")
+    end
     local pop = create("UIScale", { Parent = row })
     ROWPOP[row] = pop
     local pip = create("Frame", {
         AnchorPoint = Vector2.new(0, .5), Position = UDim2.new(0, 0, 0, (height > 0 and height or 34) / 2),
-        Size = UDim2.fromOffset(2, 0), BorderSizePixel = 0, ZIndex = 3, LayoutOrder = -1, Parent = row,
+        Size = UDim2.fromOffset(3, 0), BorderSizePixel = 0, ZIndex = 3, LayoutOrder = -1, Parent = row,
     })
     bind(pip, "BackgroundColor3", "Accent")
     row.MouseEnter:Connect(function()
         tween(st, 0.18, { Color = resolve("Accent"), Transparency = 0.3 })
-        tween(pip, 0.25, { Size = UDim2.fromOffset(2, 16) }, Enum.EasingStyle.Back)
+        tween(pip, 0.25, { Size = UDim2.fromOffset(3, 20) }, Enum.EasingStyle.Back)
         tween(pop, 0.3, { Scale = 1.01 }, Enum.EasingStyle.Back)
     end)
     row.MouseMoved:Connect(function(x)
@@ -1874,7 +2184,7 @@ local function newRow(section, height)
     end)
     row.MouseLeave:Connect(function()
         tween(st, 0.2, { Color = resolve("Stroke"), Transparency = 0.66 })
-        tween(pip, 0.2, { Size = UDim2.fromOffset(2, 0) })
+        tween(pip, 0.2, { Size = UDim2.fromOffset(3, 0) })
         tween(pop, 0.3, { Scale = 1 }, Enum.EasingStyle.Back)
         tween(sh, 0.35, { Rotation = 90 })
     end)
@@ -1962,93 +2272,74 @@ function Section:AddDivider()
     bind(d, "BackgroundColor3", "Stroke")
 end
 
----------------------------------------------------------------- Button (3D keycap)
+---------------------------------------------------------------- Button (neon slash)
 function Section:AddButton(o)
     local obj = { Type = "Button" }
     local wrap = create("Frame", { Size = UDim2.new(1, 0, 0, 34), BackgroundTransparency = 1, Parent = self.Body })
     tileUp(self, wrap, "button", 34)
-    -- extruded base (the "side" of the key)
-    local base = create("Frame", {
-        Position = UDim2.fromOffset(0, 3), Size = UDim2.new(1, 0, 0, 31), BorderSizePixel = 0, ZIndex = 1, Parent = wrap,
-    })
-    bind(base, "BackgroundColor3", "Element")
-    corner(base, 10)
-    local baseGlow = stroke(base, "Stroke", 1, 0.35)
     local btn = create("TextButton", {
-        Size = UDim2.new(1, 0, 0, 31), BackgroundColor3 = WHITE, BorderSizePixel = 0,
-        AutoButtonColor = false, Text = "", ClipsDescendants = true, ZIndex = 2, Parent = wrap,
+        Size = UDim2.fromScale(1, 1), BorderSizePixel = 0, AutoButtonColor = false, Text = "",
+        ClipsDescendants = true, ZIndex = 2, Parent = wrap,
     })
-    corner(btn, 10)
-    gradient(btn, "BtnGrad").Rotation = 90
-    local bst, _, bh = glowStroke(btn, 1.2, 70, 0.6, { idle = true, gate = gateOf(self) })
+    bind(btn, "BackgroundColor3", "Element")
+    corner(btn, 6)
+    local bst, _, bh = glowStroke(btn, 1.2, 80, 0.55, { idle = true, gate = gateOf(self) })
     local bs = create("UIScale", { Parent = btn })
-    local shade = create("Frame", { Size = UDim2.fromScale(1, 1), BackgroundColor3 = WHITE, BackgroundTransparency = 1, BorderSizePixel = 0, Parent = btn })
-    corner(shade, 10)
-    -- top specular edge (light hits the upper lip of the key)
-    local lip = create("Frame", { Position = UDim2.fromOffset(8, 1), Size = UDim2.new(1, -16, 0, 1), BackgroundColor3 = WHITE, BackgroundTransparency = 0.8, BorderSizePixel = 0, ZIndex = 3, Parent = btn })
-    local shine = create("Frame", {
-        AnchorPoint = Vector2.new(.5, .5), Position = UDim2.new(0, -40, .5, 0), Size = UDim2.new(0, 24, 2.4, 0),
-        Rotation = 20, BackgroundColor3 = WHITE, BackgroundTransparency = 0.86, BorderSizePixel = 0, ZIndex = 2, Parent = btn,
+
+    -- accent fill that sweeps in from the left on hover
+    local fill = create("Frame", { Size = UDim2.new(0, 0, 1, 0), BackgroundColor3 = WHITE, BackgroundTransparency = 0.8, BorderSizePixel = 0, ZIndex = 2, Parent = btn })
+    gradient(fill, "AccentGrad")
+
+    -- slashed accent plate with the chevron
+    local plate = create("Frame", { Size = UDim2.new(0, 30, 1, 0), BackgroundColor3 = WHITE, BorderSizePixel = 0, ZIndex = 3, Parent = btn })
+    gradient(plate, "AccentGrad").Rotation = 90
+    local cut = create("Frame", {
+        AnchorPoint = Vector2.new(.5, .5), Position = UDim2.new(1, 0, .5, 0), Size = UDim2.new(0, 10, 2, 0),
+        Rotation = 18, BorderSizePixel = 0, ZIndex = 4, Parent = plate,
     })
+    bind(cut, "BackgroundColor3", "Element")
+    local chev = drawIcon(plate, "right", { size = 10, color = BLACK, pos = UDim2.new(0, 12, .5, 0), thick = 1.9, z = 5 })
+
+    -- speed lines on the right (decoration)
+    for n = 0, 2 do
+        local sl = create("Frame", {
+            AnchorPoint = Vector2.new(.5, .5), Position = UDim2.new(1, -14 - n * 7, .5, 0), Size = UDim2.new(0, 2, 1.6, 0),
+            Rotation = 18, BackgroundColor3 = WHITE, BackgroundTransparency = 0.9 - n * 0.02, BorderSizePixel = 0, ZIndex = 3, Parent = btn,
+        })
+        bind(sl, "BackgroundColor3", "Accent")
+    end
+
     local l = create("TextLabel", {
-        BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), Text = o.Name or "Button",
-        TextColor3 = WHITE, TextSize = 13, Font = Enum.Font.GothamBold, ZIndex = 4,
-        TextXAlignment = Enum.TextXAlignment.Left, Parent = btn,
+        BackgroundTransparency = 1, Position = UDim2.fromOffset(44, 0), Size = UDim2.new(1, -60, 1, 0), Text = o.Name or "Button",
+        TextSize = 13, Font = Enum.Font.GothamBold, TextXAlignment = Enum.TextXAlignment.Left,
+        TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 5, Parent = btn,
     })
-    create("UIPadding", { PaddingLeft = UDim.new(0, 12), Parent = l })
-    local chev = drawIcon(btn, "right", { size = 10, color = WHITE, pos = UDim2.new(1, -14, .5, 0), thick = 1.6, z = 4 })
-    chev.GroupTransparency = 0.35
+    bind(l, "TextColor3", "Text")
+
     local sc = self.Tab.Window._scaleObj
-    local FACE = {
-        rest  = UDim2.fromOffset(0, 0),
-        hover = UDim2.fromOffset(0, -1),
-        press = UDim2.fromOffset(0, 3),
-    }
     btn.MouseEnter:Connect(function()
         bh.entry.on = true
-        tween(btn, 0.2, { Position = FACE.hover }, Enum.EasingStyle.Back)
-        tween(shade, 0.2, { BackgroundTransparency = 0.94 })
         tween(bst, 0.2, { Transparency = 0 })
-        tween(baseGlow, 0.2, { Transparency = 0.1 })
-        shine.Position = UDim2.new(0, -40, .5, 0)
-        tween(shine, 0.7, { Position = UDim2.new(1, 40, .5, 0) }, Enum.EasingStyle.Quad)
-    end)
-    btn.MouseMoved:Connect(function(x, y)
-        -- label drifts opposite to the cursor -> parallax inside the key
-        local rx = math.clamp((x - btn.AbsolutePosition.X) / math.max(btn.AbsoluteSize.X, 1), 0, 1)
-        local ry = math.clamp((y - btn.AbsolutePosition.Y) / math.max(btn.AbsoluteSize.Y, 1), 0, 1)
-        l.Position = UDim2.fromOffset(-(rx - 0.5) * 6 * Yqantg.Depth, -(ry - 0.5) * 4 * Yqantg.Depth)
+        tween(fill, 0.35, { Size = UDim2.new(1, 0, 1, 0) }, Enum.EasingStyle.Quint)
+        tween(plate, 0.25, { Size = UDim2.new(0, 38, 1, 0) }, Enum.EasingStyle.Back)
+        tween(chev, 0.25, { Position = UDim2.new(0, 16, .5, 0) }, Enum.EasingStyle.Back)
+        tween(l, 0.25, { Position = UDim2.fromOffset(50, 0) }, Enum.EasingStyle.Back)
     end)
     btn.MouseLeave:Connect(function()
         bh.entry.on = false
-        tween(btn, 0.3, { Position = FACE.rest }, Enum.EasingStyle.Back)
+        tween(bst, 0.25, { Transparency = 0.55 })
+        tween(fill, 0.3, { Size = UDim2.new(0, 0, 1, 0) }, Enum.EasingStyle.Quint)
+        tween(plate, 0.25, { Size = UDim2.new(0, 30, 1, 0) }, Enum.EasingStyle.Back)
+        tween(chev, 0.25, { Position = UDim2.new(0, 12, .5, 0) }, Enum.EasingStyle.Back)
+        tween(l, 0.25, { Position = UDim2.fromOffset(44, 0) }, Enum.EasingStyle.Back)
         tween(bs, 0.25, { Scale = 1 }, Enum.EasingStyle.Back)
-        tween(shade, 0.2, { BackgroundTransparency = 1 })
-        tween(bst, 0.25, { Transparency = 0.6 })
-        tween(baseGlow, 0.25, { Transparency = 0.35 })
-        tween(l, 0.25, { Position = UDim2.fromOffset(0, 0) }, Enum.EasingStyle.Back)
     end)
     btn.MouseButton1Down:Connect(function(x)
-        tween(btn, 0.06, { Position = FACE.press }, Enum.EasingStyle.Quad)
-        tween(shade, 0.08, { BackgroundTransparency = 0.8 })
-        tween(bs, 0.1, { Scale = 0.975 })
-        local s = sc and sc.Scale or 1
-        local rx = (x - btn.AbsolutePosition.X) / s
-        local d = (btn.AbsoluteSize.X / s) * 2.2
-        local r = create("Frame", {
-            AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromOffset(rx, 15), Size = UDim2.fromOffset(0, 0),
-            BackgroundColor3 = WHITE, BackgroundTransparency = 0.7, BorderSizePixel = 0, ZIndex = 3, Parent = btn,
-        })
-        corner(r, 400)
-        tween(r, 0.55, { Size = UDim2.fromOffset(d, d), BackgroundTransparency = 1 }, Enum.EasingStyle.Quad)
-        task.delay(0.6, function() r:Destroy() end)
+        tween(bs, 0.08, { Scale = 0.965 })
+        ripple(btn, x, sc, 0.7)
     end)
-    btn.MouseButton1Up:Connect(function()
-        tween(btn, 0.4, { Position = FACE.hover }, Enum.EasingStyle.Back)
-    end)
+    btn.MouseButton1Up:Connect(function() tween(bs, 0.35, { Scale = 1 }, Enum.EasingStyle.Back) end)
     btn.MouseButton1Click:Connect(function()
-        tween(bs, 0.4, { Scale = 1 }, Enum.EasingStyle.Back)
-        tween(shade, 0.15, { BackgroundTransparency = 0.94 })
         Yqantg:_sfx("Click")
         if o.Callback then task.spawn(o.Callback) end
     end)
@@ -2058,57 +2349,59 @@ function Section:AddButton(o)
     return obj
 end
 
----------------------------------------------------------------- Toggle
+---------------------------------------------------------------- Toggle (neon capsule + lit row)
 function Section:AddToggle(o)
     local obj = { Type = "Toggle", Value = o.Default == true }
     local row = newRow(self, 34)
     tileUp(self, row, "toggle", 34)
     local tiles = self.Tiles == true
+
+    -- lit row: accent wash + bright left edge when ON
+    local tint = create("Frame", { Size = UDim2.fromScale(1, 1), BackgroundColor3 = WHITE, BackgroundTransparency = 1, BorderSizePixel = 0, Parent = row })
+    gradient(tint, "AccentGrad", NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.8), NumberSequenceKeypoint.new(1, 1) }))
+    local edge = create("Frame", { Size = UDim2.new(0, 3, 1, 0), BackgroundColor3 = WHITE, BackgroundTransparency = 1, BorderSizePixel = 0, Parent = row })
+    gradient(edge, "AccentGrad").Rotation = 90
+
     local l = text(row, o.Name or "Toggle", 13)
-    if tiles then
-        l.Position = UDim2.fromOffset(12, 0); l.Size = UDim2.new(1, -64, 1, 0)
-    else
-        l.Position = UDim2.fromOffset(54, 0); l.Size = UDim2.new(1, -100, 1, 0)
-    end
+    l.Position = UDim2.fromOffset(12, 0); l.Size = UDim2.new(1, tiles and -62 or -108, 1, 0)
 
     local track = create("Frame", {
-        AnchorPoint = tiles and Vector2.new(1, .5) or Vector2.new(0, .5),
-        Position = tiles and UDim2.new(1, -10, .5, 0) or UDim2.new(0, 10, .5, 0),
-        Size = UDim2.fromOffset(34, 18), BorderSizePixel = 0, Parent = row,
+        AnchorPoint = Vector2.new(1, .5), Position = UDim2.new(1, -10, .5, 0),
+        Size = UDim2.fromOffset(38, 18), BorderSizePixel = 0, Parent = row,
     })
-    corner(track, 9)
-    gradient(track, "AccentGrad")
+    bind(track, "BackgroundColor3", "Panel")
+    corner(track, 4)
+    local tfill = create("Frame", { Size = UDim2.fromScale(1, 1), BackgroundColor3 = WHITE, BackgroundTransparency = 1, BorderSizePixel = 0, Parent = track })
+    corner(tfill, 4)
+    gradient(tfill, "AccentGrad")
     local ts = stroke(track, "Stroke", 1, 0.2)
     local knob = create("Frame", {
-        AnchorPoint = Vector2.new(0, .5), Position = UDim2.new(0, 3, .5, 0),
-        Size = UDim2.fromOffset(12, 12), BorderSizePixel = 0, Parent = track,
+        AnchorPoint = Vector2.new(.5, .5), Position = UDim2.new(0, 11, .5, 0), Size = UDim2.fromOffset(10, 10),
+        Rotation = 45, BorderSizePixel = 0, ZIndex = 2, Parent = track,
     })
-    corner(knob, 6)
-    -- sphere shading + specular dot
-    create("UIGradient", { Color = ColorSequence.new(WHITE, Color3.fromRGB(150, 150, 150)), Rotation = 90, Parent = knob })
-    stroke(knob, "Bg", 1, 0.3)
-    local spec = create("Frame", { Position = UDim2.fromOffset(3, 2), Size = UDim2.fromOffset(5, 3), BackgroundColor3 = WHITE, BackgroundTransparency = 0.5, BorderSizePixel = 0, Parent = knob })
-    corner(spec, 2)
+    corner(knob, 2)
+
     local tag = text(row, "", 10, "SubText", Enum.Font.GothamBold)
-    tag.AnchorPoint = Vector2.new(1, .5); tag.Position = UDim2.new(1, -10, .5, 0)
+    tag.AnchorPoint = Vector2.new(1, .5); tag.Position = UDim2.new(1, -56, .5, 0)
     tag.Size = UDim2.fromOffset(34, 14); tag.TextXAlignment = Enum.TextXAlignment.Right
     tag.Visible = not tiles
-    local click = create("TextButton", { BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), Text = "", Parent = row })
+    local click = create("TextButton", { BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), Text = "", ZIndex = 5, Parent = row })
 
-    local function render(animate)
+    local function render(anim)
         local on = obj.Value
-        tween(track, 0.25, { BackgroundColor3 = on and WHITE or resolve("Panel") })
-        tween(ts, 0.25, { Transparency = on and 1 or 0.2 })
+        local d = anim and 0.25 or 0
+        tween(tfill, d, { BackgroundTransparency = on and 0 or 1 })
+        tween(tint, d, { BackgroundTransparency = on and 0 or 1 })
+        tween(edge, d, { BackgroundTransparency = on and 0 or 1 })
+        tween(ts, d, { Color = on and resolve("Accent") or resolve("Stroke"), Transparency = on and 0.05 or 0.2 })
         tag.Text = on and "ON" or "OFF"
-        tween(tag, 0.25, { TextColor3 = on and resolve("Accent") or resolve("SubText") })
-        tween(knob, animate and 0.4 or 0, {
-            Position = on and UDim2.new(1, -15, .5, 0) or UDim2.new(0, 3, .5, 0),
-            BackgroundColor3 = on and Color3.fromRGB(10, 10, 12) or resolve("SubText"),
+        tween(tag, d, { TextColor3 = on and resolve("Accent") or resolve("SubText") })
+        tween(l, d, { TextColor3 = on and resolve("Accent") or resolve("Text") })
+        tween(knob, anim and 0.4 or 0, {
+            Position = on and UDim2.new(1, -11, .5, 0) or UDim2.new(0, 11, .5, 0),
+            BackgroundColor3 = on and BLACK or resolve("SubText"),
+            Rotation = on and 225 or 45,
         }, Enum.EasingStyle.Back)
-        if animate then
-            knob.Size = UDim2.fromOffset(16, 12)
-            tween(knob, 0.4, { Size = UDim2.fromOffset(12, 12) }, Enum.EasingStyle.Back)
-        end
     end
     onTheme(function() render(false) end)
 
@@ -2264,25 +2557,104 @@ function Section:AddInput(o)
     return obj
 end
 
----------------------------------------------------------------- Keybind
+---------------------------------------------------------------- Keybind (keycap + capture overlay)
+-- click the keycap -> a scanning "PRESS A KEY" strip covers the row with a 5 s countdown
+--   any key = bind · Esc = cancel · Backspace / Delete = clear · right-click keycap = clear
+local KEYNAMES = {
+    LeftShift = "L-SHIFT", RightShift = "R-SHIFT", LeftControl = "L-CTRL", RightControl = "R-CTRL",
+    LeftAlt = "L-ALT", RightAlt = "R-ALT", Return = "ENTER", Backspace = "BKSP", Space = "SPACE",
+    Zero = "0", One = "1", Two = "2", Three = "3", Four = "4", Five = "5", Six = "6", Seven = "7", Eight = "8", Nine = "9",
+    Backquote = "`", Minus = "-", Equals = "=", LeftBracket = "[", RightBracket = "]", Semicolon = ";",
+    Quote = "'", Comma = ",", Period = ".", Slash = "/", BackSlash = "\\", CapsLock = "CAPS",
+    PageUp = "PG-UP", PageDown = "PG-DN", Insert = "INS", Delete = "DEL",
+}
+local function keyLabel(k)
+    if not k or k == Enum.KeyCode.Unknown then return "NONE" end
+    return KEYNAMES[k.Name] or k.Name:upper()
+end
+
 function Section:AddKeybind(o)
     local obj = { Type = "Keybind", Value = o.Default or Enum.KeyCode.Unknown, Listening = false }
     local row = newRow(self, 34)
     local l = text(row, o.Name or "Keybind", 13)
-    l.Position = UDim2.fromOffset(10, 0); l.Size = UDim2.new(1, -90, 1, 0)
+    l.Position = UDim2.fromOffset(12, 0); l.Size = UDim2.new(1, -110, 1, 0)
 
+    -- physical keycap: dark base (the "side") + face that sinks when pressed
+    local capW = 56
+    local cap = create("Frame", {
+        AnchorPoint = Vector2.new(1, .5), Position = UDim2.new(1, -10, .5, 0), Size = UDim2.fromOffset(capW, 24),
+        BackgroundTransparency = 1, Parent = row,
+    })
+    local capBase = create("Frame", { Position = UDim2.fromOffset(0, 2), Size = UDim2.new(1, 0, 1, -2), BorderSizePixel = 0, Parent = cap })
+    bind(capBase, "BackgroundColor3", "Stroke"); corner(capBase, 5)
     local btn = create("TextButton", {
-        AnchorPoint = Vector2.new(1, .5), Position = UDim2.new(1, -8, .5, 0), Size = UDim2.fromOffset(70, 22),
-        BorderSizePixel = 0, AutoButtonColor = false, TextSize = 11, Font = Enum.Font.GothamBold, Parent = row,
+        Size = UDim2.new(1, 0, 1, -2), BorderSizePixel = 0, AutoButtonColor = false, TextSize = 11,
+        Font = Enum.Font.GothamBold, Text = "", ZIndex = 2, Parent = cap,
     })
     bind(btn, "BackgroundColor3", "Panel"); bind(btn, "TextColor3", "Accent")
-    corner(btn, 8)
+    corner(btn, 5)
+    local capStroke = stroke(btn, "Accent", 1, 0.55)
 
+    -- capture overlay (covers the whole row while listening)
+    local ov = create("TextButton", {
+        Size = UDim2.fromScale(1, 1), BorderSizePixel = 0, AutoButtonColor = false, Text = "",
+        Visible = false, ZIndex = 20, Parent = row,
+    })
+    bind(ov, "BackgroundColor3", "Side")
+    local tint = create("Frame", { Size = UDim2.fromScale(1, 1), BorderSizePixel = 0, BackgroundColor3 = WHITE, ZIndex = 21, Parent = ov })
+    gradient(tint, "AccentGrad", NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.78), NumberSequenceKeypoint.new(1, 0.94) }))
+    local scan = create("Frame", {
+        AnchorPoint = Vector2.new(.5, .5), Position = UDim2.new(0, 0, .5, 0), Size = UDim2.new(0, 36, 2, 0),
+        Rotation = 18, BorderSizePixel = 0, BackgroundTransparency = 0.8, ZIndex = 21, Parent = ov,
+    })
+    bind(scan, "BackgroundColor3", "Accent")
+    local ovTxt = create("TextLabel", {
+        BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), Text = "", TextSize = 12,
+        Font = Enum.Font.GothamBold, ZIndex = 23, Parent = ov,
+    })
+    bind(ovTxt, "TextColor3", "Text")
+    local ovSub = create("TextLabel", {
+        BackgroundTransparency = 1, AnchorPoint = Vector2.new(1, .5), Position = UDim2.new(1, -8, .5, 0), Size = UDim2.fromOffset(120, 12),
+        Text = "ESC cancel · DEL clear", TextSize = 8, Font = Enum.Font.Gotham, TextXAlignment = Enum.TextXAlignment.Right, ZIndex = 23, Parent = ov,
+    })
+    bind(ovSub, "TextColor3", "SubText")
+    local bar = create("Frame", { AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 0, 1, 0), Size = UDim2.new(1, 0, 0, 2), BorderSizePixel = 0, ZIndex = 24, Parent = ov })
+    bind(bar, "BackgroundColor3", "Accent")
+    local ovStroke = stroke(ov, "Accent", 1.2, 0.2)
+
+    local listenTok = 0
     local function render()
-        btn.Text = obj.Listening and "..." or (obj.Value == Enum.KeyCode.Unknown and "None" or obj.Value.Name)
-        tween(btn, 0.2, { BackgroundColor3 = obj.Listening and resolve("Stroke") or resolve("Panel") })
+        local lbl = keyLabel(obj.Value)
+        btn.Text = lbl
+        local w = math.clamp(#lbl * 7 + 20, 44, 120)
+        tween(cap, 0.2, { Size = UDim2.fromOffset(w, 24) }, Enum.EasingStyle.Back)
+        l.Size = UDim2.new(1, -(w + 30), 1, 0)
+        tween(btn, 0.2, { TextTransparency = (obj.Value == Enum.KeyCode.Unknown) and 0.5 or 0 })
+        ov.Visible = obj.Listening
     end
     onTheme(render)
+
+    local function stopListening()
+        listenTok = listenTok + 1
+        obj.Listening = false
+        render()
+    end
+    local function startListening()
+        listenTok = listenTok + 1
+        local my = listenTok
+        obj.Listening = true
+        ovTxt.Text = "PRESS A KEY  ·  " .. (o.Name or "Keybind")
+        ov.Visible = true
+        bar.Size = UDim2.new(1, 0, 0, 2)
+        tween(bar, 5, { Size = UDim2.new(0, 0, 0, 2) }, Enum.EasingStyle.Linear)
+        task.delay(5, function() if listenTok == my and obj.Listening then stopListening() end end)
+    end
+    animate(scan, function(t)
+        local w = ov.AbsoluteSize.X
+        if w <= 1 then return end
+        scan.Position = UDim2.new(((t * 0.55) % 1.3) - 0.15, 0, .5, 0)
+        ovStroke.Transparency = 0.25 + math.sin(t * 8) * 0.15
+    end, function() return obj.Listening end)
 
     function obj:Set(k, silent)
         if type(k) == "string" then
@@ -2298,33 +2670,41 @@ function Section:AddKeybind(o)
     function obj:SetVisible(b) row.Visible = b end
 
     addTip(btn, o.Tooltip); pressDepth(btn, row)
-    -- real key-capture (no TextBox): click -> "..." -> press a key to bind it
-    --   Esc = cancel · Backspace/Delete = clear · click elsewhere = cancel
     local hovering, justBound = false, nil
-    btn.MouseEnter:Connect(function() hovering = true end)
-    btn.MouseLeave:Connect(function() hovering = false end)
+    ov.MouseEnter:Connect(function() hovering = true end)
+    ov.MouseLeave:Connect(function() hovering = false end)
+    btn.MouseButton1Down:Connect(function() tween(btn, 0.06, { Position = UDim2.fromOffset(0, 2) }) end)
+    btn.MouseButton1Up:Connect(function() tween(btn, 0.25, { Position = UDim2.fromOffset(0, 0) }, Enum.EasingStyle.Back) end)
+    btn.MouseEnter:Connect(function() tween(capStroke, 0.15, { Transparency = 0 }) end)
+    btn.MouseLeave:Connect(function() tween(capStroke, 0.2, { Transparency = 0.55 }) end)
     btn.MouseButton1Click:Connect(function()
         Yqantg:_sfx("Click")
-        obj.Listening = not obj.Listening
-        render()
+        startListening()
     end)
-    btn.MouseButton1Down:Connect(function(x) ripple(row, x, self.Tab.Window._scaleObj) end)
+    btn.MouseButton2Click:Connect(function() obj:Set(Enum.KeyCode.Unknown) end)
+    ov.MouseButton1Click:Connect(function() stopListening() end)
+
     connect(UserInputService.InputBegan, function(i, gp)
         if obj.Listening then
             local t = i.UserInputType
             if t == Enum.UserInputType.Keyboard then
                 local k = i.KeyCode
-                obj.Listening = false
                 if k == Enum.KeyCode.Escape then
-                    render()                                   -- cancel, keep old key
+                    stopListening()
                 elseif k == Enum.KeyCode.Backspace or k == Enum.KeyCode.Delete then
-                    obj:Set(Enum.KeyCode.Unknown)              -- clear
+                    stopListening(); obj:Set(Enum.KeyCode.Unknown)
                 else
-                    justBound = k                              -- don't fire this key's release/press
+                    justBound = k
+                    ovTxt.Text = "BOUND  →  " .. keyLabel(k)
                     obj:Set(k)
+                    listenTok = listenTok + 1
+                    local my = listenTok
+                    task.delay(0.28, function() if listenTok == my then stopListening() end end)
+                    obj.Listening = false   -- stop capturing immediately, overlay closes after the flash
+                    ov.Visible = true
                 end
             elseif (t == Enum.UserInputType.MouseButton1 or t == Enum.UserInputType.Touch) and not hovering then
-                obj.Listening = false; render()                -- clicked outside -> cancel
+                stopListening()
             end
             return
         end
@@ -3596,7 +3976,7 @@ function Tab:AddSection(o)
         table.insert(self.Window._panels, { frame = frame, clear = o.NoHeader == true })
         if self.Window._glass and not o.NoHeader then self.Window:_glass() end
     end
-    corner(frame, 12)
+    corner(frame, 8)
     local fst = stroke(frame, "Stroke", 1, 0.55)
     bevelGrad(fst)
     sheen(frame, 90, 218)
@@ -3620,13 +4000,13 @@ function Tab:AddSection(o)
             Size = UDim2.new(1, 0, 0, 28), BackgroundColor3 = WHITE, BorderSizePixel = 0,
             AutoButtonColor = false, Text = "", LayoutOrder = 1, Parent = frame,
         })
-        corner(head, 9)
+        corner(head, 5)
         local hg = gradient(head, "AccentGrad", NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.86), NumberSequenceKeypoint.new(1, 1) }))
         local pip = create("Frame", { Position = UDim2.fromOffset(8, 7), Size = UDim2.fromOffset(3, 14), BackgroundColor3 = WHITE, BorderSizePixel = 0, Parent = head })
         corner(pip, 2)
         tl = create("TextLabel", {
             BackgroundTransparency = 1, Position = UDim2.fromOffset(18, 0), Size = UDim2.new(1, -74, 1, 0),
-            Text = o.Name or "Section", TextColor3 = WHITE, TextSize = 12, Font = Enum.Font.GothamBold,
+            Text = string.upper(o.Name or "Section"), TextColor3 = WHITE, TextSize = 12, Font = Enum.Font.GothamBold,
             TextXAlignment = Enum.TextXAlignment.Left, Parent = head,
         })
         arrow = drawIcon(head, "down", { size = 12, color = WHITE, pos = UDim2.new(1, -16, .5, 0), thick = 2 })
@@ -3719,7 +4099,7 @@ function Tab:AddSection(o)
     apply(false)
     if self._relayout then self._relayout(true) end
 
-    function sec:SetName(str) if tl then tl.Text = str end end
+    function sec:SetName(str) if tl then tl.Text = string.upper(tostring(str)) end end
     function sec:Toggle(state) if state == nil then state = not open end; open = state; apply(true) end
     return sec
 end
@@ -3746,18 +4126,18 @@ function Yqantg:CreateWindow(cfg)
     local shNear = softShadow(Root, { offset = 5, spread = 28, transparency = 0.35, z = 0 })
     local slab2 = create("Frame", { Position = UDim2.fromOffset(8, 13), Size = UDim2.new(1, -16, 1, 0), BorderSizePixel = 0, ZIndex = 1, Parent = Root })
     bind(slab2, "BackgroundColor3", "Panel")
-    corner(slab2, 16)
+    corner(slab2, 8)
     local slab = create("Frame", { Position = UDim2.fromOffset(0, 7), Size = UDim2.fromScale(1, 1), BorderSizePixel = 0, ZIndex = 1, Parent = Root })
     bind(slab, "BackgroundColor3", "Side")
-    corner(slab, 16)
+    corner(slab, 8)
     local Main = create("CanvasGroup", { Name = "Face", Size = UDim2.fromScale(1, 1), BorderSizePixel = 0, ZIndex = 2, Parent = Root })
     bind(Main, "BackgroundColor3", "Bg")
-    corner(Main, 16)
+    corner(Main, 8)
     local bgImg = create("ImageLabel", {
         Name = "Background", BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), ZIndex = 0,
         ScaleType = Enum.ScaleType.Crop, ImageTransparency = 1, Visible = false, Parent = Main,
     })
-    corner(bgImg, 16)
+    corner(bgImg, 8)
     local mainSheen = sheen(Main, 65, 190)
 
     -- depth machinery: introV (0..1 = how "deployed" the stack is), liftV (drag lift)
@@ -3814,6 +4194,232 @@ function Yqantg:CreateWindow(cfg)
         glowG.Rotation = (t * 45) % 360
         glow.Transparency = math.clamp(0.1 + math.sin(t * 3.5) * 0.15, 0, 0.5)   -- neon breathing
     end, vgate)
+
+    ------------------------------------------------ OUTER HUD (lives OUTSIDE the window frame)
+    -- corner brackets · title plate on top · status tag below · two anime photo stacks
+    -- (boy on the left, girl on the right) · drifting sparks in the margins.
+    -- Off:  Yqantg.Decor = false   or   CreateWindow({ Decor = false })
+    do
+    local decor
+    local DM, DMY, CW, CH, OV = 132, 52, 112, 172, 8
+    Window._cards = {}
+    if Yqantg.Decor ~= false and cfg.Decor ~= false then
+        pcall(function()
+            decor = create("CanvasGroup", {
+                Name = "OuterHUD", BackgroundTransparency = 1, BorderSizePixel = 0,
+                Position = UDim2.fromOffset(-DM, -DMY), Size = UDim2.new(1, DM * 2, 1, DMY * 2),
+                ZIndex = 6, Parent = Root,
+            })
+
+            -- corner brackets
+            local brackets = {}
+            local spots = {
+                { 0, 0, UDim2.new(0, DM - 5, 0, DMY - 5) },
+                { 1, 0, UDim2.new(1, -(DM - 5), 0, DMY - 5) },
+                { 0, 1, UDim2.new(0, DM - 5, 1, -(DMY - 5)) },
+                { 1, 1, UDim2.new(1, -(DM - 5), 1, -(DMY - 5)) },
+            }
+            for _, s in ipairs(spots) do
+                local h = create("Frame", { AnchorPoint = Vector2.new(s[1], s[2]), Position = s[3], Size = UDim2.fromOffset(26, 2), BorderSizePixel = 0, Parent = decor })
+                local v = create("Frame", { AnchorPoint = Vector2.new(s[1], s[2]), Position = s[3], Size = UDim2.fromOffset(2, 26), BorderSizePixel = 0, Parent = decor })
+                bind(h, "BackgroundColor3", "Accent"); bind(v, "BackgroundColor3", "Accent")
+                brackets[#brackets + 1] = { h, v }
+            end
+
+            -- title plate (above the top edge)
+            local plate = create("Frame", {
+                Position = UDim2.fromOffset(DM + 16, DMY - 22), Size = UDim2.fromOffset(176, 22),
+                BackgroundColor3 = WHITE, BorderSizePixel = 0, Parent = decor,
+            })
+            corner(plate, 4)
+            gradient(plate, "AccentGrad")
+            local plateLbl = create("TextLabel", {
+                BackgroundTransparency = 1, Position = UDim2.fromOffset(10, 0), Size = UDim2.new(1, -14, 1, 0),
+                Text = "//  " .. tostring(cfg.Title or "Yqantg"):upper(), TextSize = 11, Font = Enum.Font.GothamBlack,
+                TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Parent = plate,
+            })
+            bind(plateLbl, "TextColor3", "Bg")
+            Window._plateLbl = plateLbl
+            local ver = create("TextLabel", {
+                BackgroundTransparency = 1, Position = UDim2.fromOffset(DM + 198, DMY - 20), Size = UDim2.fromOffset(60, 18),
+                Text = "v" .. tostring(Yqantg.Version), TextSize = 10, Font = Enum.Font.GothamBold,
+                TextXAlignment = Enum.TextXAlignment.Left, Parent = decor,
+            })
+            bind(ver, "TextColor3", "Accent")
+
+            -- status tag (below the bottom edge, right side)
+            local tagF = create("Frame", {
+                AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -(DM + 16), 1, -(DMY - 2)), Size = UDim2.fromOffset(150, 20),
+                BorderSizePixel = 0, Parent = decor,
+            })
+            bind(tagF, "BackgroundColor3", "Side"); corner(tagF, 4); stroke(tagF, "Accent", 1, 0.35)
+            local dot = create("Frame", { AnchorPoint = Vector2.new(0, .5), Position = UDim2.new(0, 8, .5, 0), Size = UDim2.fromOffset(6, 6), BorderSizePixel = 0, Parent = tagF })
+            bind(dot, "BackgroundColor3", "Accent"); corner(dot, 3)
+            local tagL = text(tagF, "ANIME  EDITION", 9, "SubText", Enum.Font.GothamBold)
+            tagL.Position = UDim2.fromOffset(20, 0); tagL.Size = UDim2.new(1, -24, 1, 0)
+
+            -- photo stacks
+            local function cardGender(side)
+                local pref = Yqantg.AnimeGender
+                if pref == "Girl" or pref == "Boy" then return pref end
+                return side == "L" and "Boy" or "Girl"
+            end
+            local function makeCard(side)
+                local left = side == "L"
+                local baseX = left and UDim2.new(0, DM - CW + OV, 0, DMY + 34) or UDim2.new(1, -(DM + OV), 1, -(DMY + 34))
+                local card = create("Frame", {
+                    Name = "Card" .. side, AnchorPoint = left and Vector2.new(0, 0) or Vector2.new(0, 1),
+                    Position = baseX, Size = UDim2.fromOffset(CW, CH), BackgroundTransparency = 1, Rotation = left and -3 or 3, Parent = decor,
+                })
+                local back = create("Frame", {
+                    AnchorPoint = Vector2.new(.5, .5), Position = UDim2.new(.5, left and -11 or 11, .5, 8),
+                    Size = UDim2.fromScale(.94, .94), Rotation = left and -8 or 8, BorderSizePixel = 0, Parent = card,
+                })
+                bind(back, "BackgroundColor3", "Panel"); corner(back, 6); stroke(back, "Stroke", 1, 0.2)
+                local backImg = create("ImageLabel", {
+                    Position = UDim2.fromOffset(3, 3), Size = UDim2.new(1, -6, 1, -6), BackgroundTransparency = 1,
+                    ScaleType = Enum.ScaleType.Crop, ImageTransparency = 1, ImageColor3 = Color3.fromRGB(140, 140, 150), Parent = back,
+                })
+                corner(backImg, 4)
+
+                local front = create("TextButton", {
+                    Size = UDim2.fromScale(1, 1), BorderSizePixel = 0, AutoButtonColor = false, Text = "", ClipsDescendants = true, ZIndex = 2, Parent = card,
+                })
+                bind(front, "BackgroundColor3", "Panel"); corner(front, 6)
+                local phG = create("Frame", { Size = UDim2.fromScale(1, 1), BackgroundColor3 = WHITE, BorderSizePixel = 0, Parent = front })
+                gradient(phG, "AccentGrad").Rotation = 70
+                local ph = create("TextLabel", {
+                    BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), Text = Compat.canAssets and "LOADING" or "NO IMG",
+                    TextSize = 10, Font = Enum.Font.GothamBold, TextColor3 = BLACK, TextTransparency = 0.35, ZIndex = 2, Parent = front,
+                })
+                local img = create("ImageLabel", {
+                    Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, ScaleType = Enum.ScaleType.Crop,
+                    ImageTransparency = 1, ZIndex = 3, Parent = front,
+                })
+                corner(img, 6); corner(phG, 6)
+                local shade = create("Frame", {
+                    AnchorPoint = Vector2.new(0, 1), Position = UDim2.fromScale(0, 1), Size = UDim2.new(1, 0, 0, 56),
+                    BackgroundColor3 = BLACK, BorderSizePixel = 0, ZIndex = 4, Parent = front,
+                })
+                create("UIGradient", { Rotation = 90, Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(1, 0.15) }), Parent = shade })
+                corner(shade, 6)
+                local nameL = create("TextLabel", {
+                    BackgroundTransparency = 1, AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 8, 1, -16), Size = UDim2.new(1, -16, 0, 14),
+                    Text = "", TextSize = 12, Font = Enum.Font.GothamBlack, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 5, Parent = front,
+                })
+                bind(nameL, "TextColor3", "Accent")
+                local hint = create("TextLabel", {
+                    BackgroundTransparency = 1, AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 8, 1, -4), Size = UDim2.new(1, -16, 0, 10),
+                    Text = "CLICK  ·  SHUFFLE", TextSize = 8, Font = Enum.Font.GothamBold, TextColor3 = WHITE, TextTransparency = 0.3,
+                    TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 5, Parent = front,
+                })
+                local num = create("TextLabel", {
+                    BackgroundTransparency = 1, Position = UDim2.fromOffset(8, 6), Size = UDim2.fromOffset(40, 12),
+                    Text = left and "01" or "02", TextSize = 10, Font = Enum.Font.GothamBlack, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 5, Parent = front,
+                })
+                bind(num, "TextColor3", "Accent")
+                glowStroke(front, 1.8, 55, 0.05, { gate = vgate })
+
+                local c = { frame = card, side = side, gender = cardGender(side) }
+                nameL.Text = string.upper(c.gender)
+                function c.setImage(asset)
+                    if not img.Parent then return end
+                    if img.Image ~= "" then backImg.Image = img.Image; backImg.ImageTransparency = 0 end
+                    img.ImageTransparency = 1
+                    img.Image = asset
+                    tween(img, 0.5, { ImageTransparency = 0 })
+                    ph.Visible = false; phG.Visible = false
+                end
+                function c.shuffle()
+                    c.gender = cardGender(side)
+                    nameL.Text = string.upper(c.gender)
+                    Yqantg:_image(string.lower(c.gender), c.setImage)
+                end
+                local wob = 0
+                front.MouseButton1Click:Connect(function()
+                    Yqantg:_sfx("Click")
+                    wob = 1
+                    c.shuffle()
+                end)
+                local phase = left and 0 or 2.1
+                animate(card, function(t)
+                    local k = Yqantg.Depth
+                    local ox = -par.x * 14 * k
+                    local oy = math.sin(t * 1.3 + phase) * 3 - par.y * 7 * k - liftV.Value * 0.6 * k
+                    if wob > 0 then wob = math.max(0, wob - 0.06) end
+                    card.Position = UDim2.new(baseX.X.Scale, baseX.X.Offset + ox, baseX.Y.Scale, baseX.Y.Offset + oy)
+                    card.Rotation = (left and -3 or 3) + math.sin(t * 0.9 + phase) * 1.2 - par.x * 3 + math.sin(wob * math.pi * 4) * wob * 7
+                end, vgate)
+                Window._cards[side] = c
+                c.shuffle()
+                return c
+            end
+            makeCard("L"); makeCard("R")
+
+            -- slow auto-rotation of the pictures (alternating sides)
+            local lastRot, nextSide = os.clock(), "L"
+            animate(decor, function(t)
+                if Yqantg.GalleryRotate == false then return end
+                if t - lastRot >= (Yqantg.GalleryInterval or 30) then
+                    lastRot = t
+                    local c = Window._cards[nextSide]
+                    if c then c.shuffle() end
+                    nextSide = nextSide == "L" and "R" or "L"
+                end
+            end, vgate)
+
+            -- drifting sparks in the side margins
+            local sparks = {}
+            for i = 1, UserInputService.TouchEnabled and 8 or 16 do
+                local left = i % 2 == 0
+                local sz = math.random(3, 6)
+                local f = create("Frame", {
+                    Size = UDim2.fromOffset(sz, sz), Rotation = math.random(0, 90), BorderSizePixel = 0,
+                    BackgroundTransparency = 0.25, Parent = decor,
+                })
+                bind(f, "BackgroundColor3", "Accent")
+                sparks[i] = { f = f, left = left, x = math.random() * (DM - 14) + 4, y = math.random(), v = math.random(2, 7) / 1000, ph = math.random() * 6.28, sz = sz }
+            end
+            animate(decor, function(t)
+                for _, p in ipairs(sparks) do
+                    p.y = p.y - p.v
+                    if p.y < -0.03 then p.y = 1.03; p.x = math.random() * (DM - 14) + 4 end
+                    local sx = p.x + math.sin(t * 1.4 + p.ph) * 6
+                    p.f.Position = p.left and UDim2.new(0, sx, p.y, 0) or UDim2.new(1, -sx - p.sz, p.y, 0)
+                    p.f.Rotation = (t * 40 + p.ph * 20) % 360
+                    p.f.BackgroundTransparency = 0.35 + math.sin(t * 2 + p.ph) * 0.3
+                end
+                for i, b in ipairs(brackets) do
+                    local a = 0.05 + (math.sin(t * 2.4 + i) + 1) * 0.12
+                    b[1].BackgroundTransparency = a; b[2].BackgroundTransparency = a
+                end
+                dot.BackgroundTransparency = (math.floor(t * 1.6) % 2 == 0) and 0 or 0.7
+            end, vgate)
+
+            -- fade with the window: hidden while closed / minimized
+            animate(decor, function()
+                local want = (Window.Visible and not Window.Minimized and not Window._hideDecor) and 0 or 1
+                local cur = decor.GroupTransparency
+                local nxt = cur + (want - cur) * 0.3
+                if math.abs(want - nxt) < 0.02 then nxt = want end
+                decor.GroupTransparency = nxt
+                decor.Visible = nxt < 0.99
+            end)
+            Window._decor = decor
+        end)
+    end
+    function Window:SetDecor(on)
+        Window._hideDecor = not on
+        if decor and on then decor.Visible = true end
+    end
+    function Window:SetPortrait(side, asset)
+        local c = Window._cards and Window._cards[side == "Right" and "R" or (side == "Left" and "L" or side)]
+        if c and asset then c.setImage(asset) end
+    end
+    function Window:ShuffleCards()
+        for _, c in pairs(Window._cards or {}) do c.shuffle() end
+    end
+    end
 
     -- space-dust particles behind the content (fewer on touch devices)
     local dust
@@ -4019,7 +4625,7 @@ function Yqantg:CreateWindow(cfg)
         TextXAlignment = Enum.TextXAlignment.Left, Parent = side,
     })
     bind(search, "BackgroundColor3", "Element"); bind(search, "TextColor3", "Text"); bind(search, "PlaceholderColor3", "SubText")
-    corner(search, 13)
+    corner(search, 6)
     stroke(search, "Stroke", 1, 0.6)
     create("UIPadding", { PaddingLeft = UDim.new(0, 12), Parent = search })
 
@@ -4028,7 +4634,7 @@ function Yqantg:CreateWindow(cfg)
         Position = UDim2.fromOffset(6, 42), Size = UDim2.new(1, -12, 0, 32), BackgroundColor3 = WHITE,
         BorderSizePixel = 0, Visible = false, Parent = side,
     })
-    corner(indicator, 10)
+    corner(indicator, 5)
     gradient(indicator, "AccentGrad", NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.7), NumberSequenceKeypoint.new(1, 0.93) }))
     create("UIStroke", { Thickness = 1, Transparency = 0.82, Color = WHITE, ApplyStrokeMode = Enum.ApplyStrokeMode.Border, Parent = indicator })
     local ipip = create("Frame", { AnchorPoint = Vector2.new(0, .5), Position = UDim2.new(0, 0, .5, 0), Size = UDim2.fromOffset(3, 16), BackgroundColor3 = WHITE, BorderSizePixel = 0, Parent = indicator })
@@ -4103,7 +4709,7 @@ function Yqantg:CreateWindow(cfg)
         BorderSizePixel = 0, Visible = false, ZIndex = 30, Parent = Main,
     })
     bind(panel, "BackgroundColor3", "Side")
-    corner(panel, 14)
+    corner(panel, 8)
     sheen(panel, 70, 150)
     glowStroke(panel, 1.4, 60, 0.15, { gate = function() return panelOpen end })
 
@@ -4153,7 +4759,7 @@ function Yqantg:CreateWindow(cfg)
             LayoutOrder = cardOrder, ZIndex = 32, Parent = scroll,
         })
         bind(c, "BackgroundColor3", "Element")
-        corner(c, 10)
+        corner(c, 6)
         stroke(c, "Stroke", 1, 0.55)
         create("UIPadding", { PaddingTop = UDim.new(0, 9), PaddingBottom = UDim.new(0, 10), PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10), Parent = c })
         create("UIListLayout", { Padding = UDim.new(0, 7), SortOrder = Enum.SortOrder.LayoutOrder, Parent = c })
@@ -4336,6 +4942,109 @@ function Yqantg:CreateWindow(cfg)
         Window:SetBackground("anime")
     end)
     buttonRow(bgCard, "REMOVE BACKGROUND", function() Window:SetBackground(false) end)
+
+    -- ANIME GALLERY (girl / boy pictures -> background or the two outer photo cards)
+    do
+        local galCard = card("ANIME GALLERY")
+        local applyTo = "BG"
+        local galleryFill
+
+        local function chipRow(items, current, onPick)
+            local r = create("Frame", { Size = UDim2.new(1, 0, 0, 26), BackgroundTransparency = 1, LayoutOrder = nextLO(galCard), ZIndex = 33, Parent = galCard })
+            create("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder, Parent = r })
+            local chips = {}
+            local function paint()
+                for key, st in pairs(chips) do st.Transparency = (current() == key) and 0.05 or 1 end
+            end
+            for idx, it in ipairs(items) do
+                local b = create("TextButton", {
+                    Size = UDim2.new(1 / #items, -(6 * (#items - 1)) / #items, 1, 0), BorderSizePixel = 0, AutoButtonColor = false,
+                    Text = "", LayoutOrder = idx, ZIndex = 34, Parent = r,
+                })
+                bind(b, "BackgroundColor3", "Panel"); corner(b, 5)
+                local tl = text(b, it[2], 10, "Text", Enum.Font.GothamBold)
+                tl.Size = UDim2.fromScale(1, 1); tl.TextXAlignment = Enum.TextXAlignment.Center; tl.ZIndex = 35
+                chips[it[1]] = stroke(b, "Accent", 1.4, 1)
+                b.MouseButton1Click:Connect(function() Yqantg:_sfx("Click"); onPick(it[1]); paint() end)
+            end
+            onTheme(paint); paint()
+        end
+
+        chipRow({ { "Both", "BOTH" }, { "Girl", "GIRL" }, { "Boy", "BOY" } },
+            function() return Yqantg.AnimeGender or "Both" end,
+            function(g)
+                Yqantg.AnimeGender = g
+                Window:ShuffleCards()
+                if galleryFill then galleryFill() end
+            end)
+        chipRow({ { "BG", "BACKGROUND" }, { "L", "LEFT CARD" }, { "R", "RIGHT CARD" } },
+            function() return applyTo end,
+            function(k) applyTo = k end)
+
+        local grid = create("Frame", { Size = UDim2.new(1, 0, 0, 110), BackgroundTransparency = 1, LayoutOrder = nextLO(galCard), ZIndex = 33, Parent = galCard })
+        create("UIGridLayout", {
+            CellSize = UDim2.new(1 / 3, -4, 0, 52), CellPadding = UDim2.fromOffset(6, 6),
+            SortOrder = Enum.SortOrder.LayoutOrder, Parent = grid,
+        })
+        local thumbs = {}
+        for i = 1, 6 do
+            local t = create("ImageButton", {
+                BorderSizePixel = 0, AutoButtonColor = false, ScaleType = Enum.ScaleType.Crop, Image = "",
+                LayoutOrder = i, ZIndex = 34, Parent = grid,
+            })
+            bind(t, "BackgroundColor3", "Panel"); corner(t, 5)
+            local st = stroke(t, "Stroke", 1, 0.3)
+            local lbl = create("TextLabel", {
+                BackgroundTransparency = 1, AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 5, 1, -3), Size = UDim2.new(1, -10, 0, 10),
+                Text = "", TextSize = 8, Font = Enum.Font.GothamBold, TextColor3 = WHITE, TextStrokeTransparency = 0.4,
+                TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 36, Parent = t,
+            })
+            t.MouseEnter:Connect(function() tween(st, 0.15, { Color = resolve("Accent"), Transparency = 0 }) end)
+            t.MouseLeave:Connect(function() tween(st, 0.2, { Color = resolve("Stroke"), Transparency = 0.3 }) end)
+            local item = { btn = t, lbl = lbl }
+            thumbs[i] = item
+            t.MouseButton1Click:Connect(function()
+                if not item.asset then return end
+                Yqantg:_sfx("Click")
+                if applyTo == "BG" then Window:SetBackground(item.asset)
+                else Window:SetPortrait(applyTo, item.asset) end
+            end)
+        end
+
+        local busy = false
+        function galleryFill()
+            if busy then return end
+            if not Compat.canAssets then
+                Yqantg:Notify({ Title = "Images unavailable", Content = "Needs writefile + getcustomasset (or put rbxassetid ids in Yqantg.AnimeCustom).", Type = "Warning" })
+                return
+            end
+            busy = true
+            for _, it in ipairs(thumbs) do it.btn.Image = ""; it.asset = nil; it.lbl.Text = "..." end
+            task.spawn(function()
+                for i, it in ipairs(thumbs) do
+                    if Yqantg._unloaded or not it.btn.Parent then break end
+                    local g = Yqantg.AnimeGender
+                    if g ~= "Girl" and g ~= "Boy" then g = (i % 2 == 1) and "Girl" or "Boy" end
+                    local asset = Yqantg:_randomAnime(g)
+                    if not asset then Yqantg:_image(string.lower(g), function(a) asset = a end) end
+                    if asset and it.btn.Parent then
+                        it.asset = asset
+                        it.btn.Image = asset
+                        it.lbl.Text = string.upper(g)
+                    else
+                        it.lbl.Text = "-"
+                    end
+                end
+                busy = false
+            end)
+        end
+        Window._galleryFill = galleryFill
+
+        buttonRow(galCard, "REFRESH IMAGES", galleryFill)
+        buttonRow(galCard, "SHUFFLE OUTER CARDS", function() Window:ShuffleCards() end)
+        toggleRow(galCard, "Auto-rotate cards", function() return Yqantg.GalleryRotate ~= false end, function(b) Yqantg.GalleryRotate = b end)
+        toggleRow(galCard, "Outer HUD (outside window)", function() return not Window._hideDecor end, function(b) Window:SetDecor(b) end)
+    end
 
     -- SOUND & INPUT
     local sndCard = card("SOUND & INPUT")
@@ -4545,6 +5254,7 @@ function Yqantg:CreateWindow(cfg)
         if state == panelOpen then return end
         panelOpen = state
         ptok = ptok + 1
+        if state and Window._galleryFill and not Window._galleryDone then Window._galleryDone = true; Window._galleryFill() end
         local my = ptok
         if state then
             panel.Size = UDim2.fromOffset(PW, math.clamp(fs.Y.Offset - TOP - 22, 160, 430))
@@ -4710,7 +5420,7 @@ function Yqantg:CreateWindow(cfg)
         Yqantg:_lock("press" .. tostring(Window), false)
         Yqantg:_syncBlur()
     end
-    function Window:SetTitle(s, sub) title.Text = s or title.Text; if sub then subtitle.Text = "●  " .. sub end end
+    function Window:SetTitle(s, sub) title.Text = s or title.Text; if Window._plateLbl and s then Window._plateLbl.Text = "//  " .. string.upper(tostring(s)) end; if sub then subtitle.Text = "●  " .. sub end end
     function Window:Notify(o) Yqantg:Notify(o) end
 
     -- background image (id / url / "anime"); transparency 0 = solid image, 1 = invisible
@@ -4744,33 +5454,29 @@ function Yqantg:CreateWindow(cfg)
         end)
     end
 
-    -- BUILT-IN decorations (locked: not configurable from example / scripts).
-    --  1) anime girl peeking from behind the LEFT edge of the window
-    --  2) white mask sitting on the BOTTOM-LEFT corner (in front of the window)
-    -- No frame / no border. They move with the UI: parallax with the cursor, lift while dragging,
-    -- bob when minimized (then hidden). Click one and it hops.
-    local DECOR = {
-        {   -- anime girl
-            Image = "https://raw.githubusercontent.com/anhyeeuemnhieulam-ai/makingkiba/refs/heads/main/2770-removebg-preview.png",
-            W = 150, H = 150, Anchor = Vector2.new(0, 0), Pos = UDim2.new(0, -100, 0, 64), Z = 1, Par = 1,
-        },
-        {   -- white mask, bottom-left corner
-            Image = "https://raw.githubusercontent.com/anhyeeuemnhieulam-ai/makingkiba/refs/heads/main/IMG_20261112_075530.png",
-            W = 66, H = 100, Anchor = Vector2.new(0, 1), Pos = UDim2.new(0, -24, 1, 6), Z = 3, Par = 1.3,   -- W~H*0.66 so no empty padding: hugs the corner
-        },
+    -- BUILT-IN mascot (locked: not configurable from example / scripts).
+    -- Anime girl peeks out from behind the LEFT edge of the window, no frame / no border,
+    -- and moves with the UI: parallax with the cursor, lift while dragging, bob when minimized.
+    -- Click her and she hops.
+    local MASCOT = {
+        Image = "https://raw.githubusercontent.com/anhyeeuemnhieulam-ai/makingkiba/refs/heads/main/2770-removebg-preview.png",
+        Size  = 150,   -- picture size
+        Show  = 100,   -- how many px stick out of the left edge (rest hides behind the window)
+        Y     = 64,    -- distance from the window's top edge
     }
-    for _, def in ipairs(DECOR) do
-        local sz = def.H
+    if Yqantg.Decor == false or cfg.Decor == false then
+        local sz, show = MASCOT.Size, MASCOT.Show
         local holder = create("Frame", {
-            Name = "Decor", AnchorPoint = def.Anchor, Position = def.Pos, Size = UDim2.fromOffset(def.W, def.H),
-            BackgroundTransparency = 1, ZIndex = def.Z, Parent = Root,   -- Z 1 = behind the window face (peeks out), Z 3 = in front
+            Name = "Mascot", AnchorPoint = Vector2.new(0, 0),
+            Position = UDim2.fromOffset(-show, MASCOT.Y), Size = UDim2.fromOffset(sz, sz),
+            BackgroundTransparency = 1, ZIndex = 1, Parent = Root,   -- below the window face (ZIndex 2) = peeks from behind
         })
         local pic = create("ImageButton", {
             Name = "Pic", AnchorPoint = Vector2.new(.5, 1), Position = UDim2.fromScale(.5, 1), Size = UDim2.fromScale(1, 1),
             BackgroundTransparency = 1, AutoButtonColor = false, ImageTransparency = 1,
-            ScaleType = Enum.ScaleType.Fit, BorderSizePixel = 0, ZIndex = def.Z, Parent = holder,   -- no corner, no stroke
+            ScaleType = Enum.ScaleType.Fit, BorderSizePixel = 0, ZIndex = 1, Parent = holder,   -- no corner, no stroke
         })
-        Yqantg:_image(def.Image, function(asset)
+        Yqantg:_image(MASCOT.Image, function(asset)
             if not pic.Parent then return end
             pic.Image = asset
             tween(pic, 0.5, { ImageTransparency = 0 })
@@ -4778,7 +5484,7 @@ function Yqantg:CreateWindow(cfg)
 
         local hop = 0
         animate(holder, function(t)
-            local k = Yqantg.Depth * def.Par
+            local k = Yqantg.Depth
             -- same motion as the UI layers: slides against the cursor + lifts while dragging
             local ox = -par.x * 12 * k
             local oy = -par.y * 8 * k - liftV.Value * 0.6 * k
@@ -4788,7 +5494,7 @@ function Yqantg:CreateWindow(cfg)
                 oy = oy + math.sin(t * 2.2) * 3
                 rot = math.sin(t * 1.6) * 1.4
             end
-            holder.Position = UDim2.new(def.Pos.X.Scale, def.Pos.X.Offset + ox, def.Pos.Y.Scale, def.Pos.Y.Offset + oy)
+            holder.Position = UDim2.fromOffset(-show + ox, MASCOT.Y + oy)
             holder.Rotation = rot
             holder.Visible = not Window.Minimized
             -- idle breathing
@@ -4804,114 +5510,6 @@ function Yqantg:CreateWindow(cfg)
         pic.MouseButton1Click:Connect(function()
             if hop <= 0 then hop = 1; Yqantg:_sfx("Click") end
         end)
-    end
-
-    -- MINIMIZE ART: when the window collapses to the floating bar (the - button) a wide lace + snake ornament
-    -- rises from BEHIND the bar and bobs / tilts / lifts exactly like the UI.
-    do
-        local urls = {
-            (type(cfg.MinArt) == "string" and cfg.MinArt) or
-            "https://raw.githubusercontent.com/anhyeeuemnhieulam-ai/Test-Library/refs/heads/main/lol.png",
-        }
-        local S = fs.X.Offset / 600
-        -- ONE wide ornament (lace + snake) sitting BEHIND the minimized bar: the lace wraps the bar, the snake peeks above it.
-        -- x / y: px from the bar centre / bar top (y = BOTTOM edge of the image), z 0 = behind the bar
-        local PIECES = {
-            { name = "Art", W = 680, H = 306, x = 0, y = TOP + 26, rot = 0, z = 0, fx = 0, fy = 150, delay = 0.30 },
-        }
-        local parts, okCount, doneCount = {}, 0, 0
-        for i, def in ipairs(PIECES) do
-            local holder = create("Frame", {
-                Name = "MinSnake" .. def.name, AnchorPoint = Vector2.new(.5, 1),
-                Position = UDim2.new(.5, def.x * S, 0, def.y), Size = UDim2.fromOffset(def.W * S, def.H * S),
-                BackgroundTransparency = 1, Visible = false, ZIndex = def.z, Parent = Root,
-            })
-            local pic = create("ImageLabel", {
-                Name = "Pic", BackgroundTransparency = 1, ImageTransparency = 1, ScaleType = Enum.ScaleType.Fit,
-                AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromScale(1, 1),
-                ZIndex = 1, Parent = holder,
-            })
-            local sc = create("UIScale", { Scale = 0.6, Parent = pic })
-            local ap = create("NumberValue", { Value = 0, Parent = holder })   -- 0 = hidden, 1 = in place
-            parts[i] = { holder = holder, pic = pic, sc = sc, ap = ap, def = def }
-
-            local loaded = false
-            task.spawn(function()
-                for _ = 1, 6 do                      -- retry: first download can fail / be slow
-                    if loaded or not pic.Parent then break end
-                    Yqantg:_image(urls[i], function(asset)
-                        if not pic.Parent then return end
-                        pic.Image = asset; loaded = true
-                    end)
-                    local w = 0
-                    while not loaded and w < 6 and pic.Parent do task.wait(0.5); w = w + 0.5 end
-                end
-                doneCount = doneCount + 1
-                if loaded then okCount = okCount + 1 end
-                if doneCount == #PIECES then
-                    pcall(function()
-                        Yqantg:Notify({ Title = "MinSnake", Content = okCount .. "/" .. #PIECES .. " images loaded", Duration = 3 })
-                    end)
-                end
-            end)
-        end
-
-        local shown = false
-        local function artIn()
-            shown = true
-            for _, p in ipairs(parts) do
-                p.holder.Visible = true
-                p.ap.Value = 0; p.pic.ImageTransparency = 1; p.sc.Scale = 0.6
-                task.delay(p.def.delay, function()   -- bar collapses first, then tail -> body -> head
-                    if not shown then return end
-                    tween(p.ap, 0.8, { Value = 1 }, Enum.EasingStyle.Back)
-                    tween(p.sc, 0.8, { Scale = 1 }, Enum.EasingStyle.Back)
-                    tween(p.pic, 0.4, { ImageTransparency = 0 }, Enum.EasingStyle.Quad)
-                end)
-            end
-        end
-        local function artOut()
-            shown = false
-            for _, p in ipairs(parts) do
-                tween(p.ap, 0.35, { Value = 0 }, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
-                tween(p.sc, 0.3, { Scale = 0.6 }, Enum.EasingStyle.Quad)
-                tween(p.pic, 0.3, { ImageTransparency = 1 }, Enum.EasingStyle.Quad)
-                task.delay(0.4, function() if not shown then p.holder.Visible = false end end)
-            end
-        end
-
-        local was, errd = false, false
-        animate(parts[1].holder, function(t)
-            local ok, err = pcall(function()
-                if Window.Minimized ~= was then
-                    was = Window.Minimized
-                    if was then artIn() else artOut() end
-                end
-                local k = Yqantg.Depth
-                -- same motion as the UI: parallax against the cursor + lift while dragging + minimized bob
-                local ox = -par.x * 12 * k
-                local oy = -par.y * 8 * k - liftV.Value * 0.6 * k
-                local rot = 0
-                if Window.Minimized then
-                    oy = oy + math.sin(t * 2.2) * 3
-                    rot = math.sin(t * 1.6) * 1.4
-                end
-                for i, p in ipairs(parts) do
-                    if p.holder.Visible then
-                        local d, a = p.def, p.ap.Value
-                        local wave = shown and math.sin(t * 2.2 + i * 0.9) * 3 or 0     -- snake ripple
-                        p.holder.Position = UDim2.new(.5, (d.x + d.fx * (1 - a)) * S + ox * (0.8 + i * 0.1),
-                            0, d.y + d.fy * (1 - a) + oy + wave)
-                        p.holder.Rotation = d.rot + rot
-                        if shown then p.pic.Rotation = math.sin(t * 1.3 + i * 0.8) * 2.5 end
-                    end
-                end
-            end)
-            if not ok and not errd then
-                errd = true
-                pcall(function() Yqantg:Notify({ Title = "MinSnake error", Content = tostring(err):sub(1, 90), Duration = 8 }) end)
-            end
-        end, function() return Window.Visible end)
     end
 
     minBtn.MouseButton1Click:Connect(function() Window:Minimize() end)
@@ -5044,7 +5642,7 @@ function Yqantg:CreateWindow(cfg)
             Size = UDim2.new(1, 0, 0, 32), BackgroundColor3 = WHITE, BackgroundTransparency = 1,
             BorderSizePixel = 0, AutoButtonColor = false, Text = "", LayoutOrder = #Window.Tabs + 1, Parent = tabList,
         })
-        corner(b, 10)
+        corner(b, 5)
         b.ClipsDescendants = true
         local lab = text(b, tab.Name, 13, "SubText", Enum.Font.GothamBold)
         lab.Position = UDim2.fromOffset(14, 0); lab.Size = UDim2.new(1, -44, 1, 0)
@@ -5152,51 +5750,82 @@ function Yqantg:CreateWindow(cfg)
         return tab
     end
 
-    -- ready-made config tab
+    -- ready-made profile tab (typed .yqcfg profiles, backup, share codes)
     function Window:AddConfigTab(name)
         local tab = Window:AddTab(name or "Config")
-        local sec = tab:AddSection("Configs")
-        local nameBox = sec:AddInput({ Name = "Config name", Placeholder = "my-config", NoSave = true })
-        local list = sec:AddDropdown({ Name = "Saved configs", Options = Yqantg:ListConfigs(), NoSave = true })
-        sec:AddButton({ Name = "Save", Callback = function()
+        local sec = tab:AddSection("Profiles")
+        local nameBox = sec:AddInput({ Name = "Profile name", Placeholder = "my-profile", NoSave = true })
+        local info
+        local function refreshInfo(n)
+            local i = n and Yqantg:GetConfigInfo(n)
+            if not i then info:Set("No profile selected"); return end
+            if i.legacy then info:Set(n .. "  ·  v2 json (saving upgrades it to v3)"); return end
+            info:Set(("%s  ·  %s entries  ·  %s"):format(n, tostring(i.count or "?"), i.saved and os.date("%d/%m %H:%M", i.saved) or "?"))
+        end
+        local list = sec:AddDropdown({ Name = "Saved profiles", Options = Yqantg:ListConfigs(), NoSave = true,
+            Callback = function(v) if type(v) == "string" then refreshInfo(v) end end })
+        info = sec:AddLabel("No profile selected")
+        local function relist(select)
+            list:SetOptions(Yqantg:ListConfigs())
+            if select then list:Set(select, true); refreshInfo(select) end
+        end
+        sec:AddButton({ Name = "Save profile", Callback = function()
             local n = nameBox.Value ~= "" and nameBox.Value or list.Value
-            if n and Yqantg:SaveConfig(n) then
-                list:SetOptions(Yqantg:ListConfigs())
-                list:Set(n, true)
-                Yqantg:Notify({ Title = "Config saved", Content = tostring(n) .. (Compat.canFiles and "" or "  (this session only)"), Type = "Success" })
+            local saved = n and Yqantg:SaveConfig(n)
+            if saved then
+                relist(saved)
+                Yqantg:Notify({ Title = "Profile saved", Content = tostring(saved) .. (Compat.canFiles and "" or "  (this session only)"), Type = "Success" })
             else
-                Yqantg:Notify({ Title = "Save failed", Content = "Enter a name (executor must support writefile).", Type = "Error" })
+                Yqantg:Notify({ Title = "Save failed", Content = "Enter a profile name first.", Type = "Error" })
             end
         end })
-        sec:AddButton({ Name = "Load", Callback = function()
+        sec:AddButton({ Name = "Load profile", Callback = function()
             if list.Value and Yqantg:LoadConfig(list.Value) then
-                Yqantg:Notify({ Title = "Config loaded", Content = tostring(list.Value), Type = "Success" })
+                Yqantg:Notify({ Title = "Profile loaded", Content = tostring(list.Value), Type = "Success" })
             else
-                Yqantg:Notify({ Title = "Load failed", Content = "Pick a saved config first.", Type = "Warning" })
+                Yqantg:Notify({ Title = "Load failed", Content = "Pick a saved profile first.", Type = "Warning" })
             end
         end })
-        sec:AddButton({ Name = "Refresh list", Callback = function() list:SetOptions(Yqantg:ListConfigs()) end })
-        sec:AddButton({ Name = "Delete", Callback = function()
+        sec:AddButton({ Name = "Delete profile", Callback = function()
             if list.Value and Yqantg:DeleteConfig(list.Value) then
-                Yqantg:Notify({ Title = "Config deleted", Content = tostring(list.Value), Type = "Warning" })
-                list:Set(nil, true)
-                list:SetOptions(Yqantg:ListConfigs())
+                Yqantg:Notify({ Title = "Profile deleted", Content = tostring(list.Value), Type = "Warning" })
+                list:Set(nil, true); relist(nil); refreshInfo(nil)
             else
-                Yqantg:Notify({ Title = "Delete failed", Content = "Pick a saved config first.", Type = "Error" })
+                Yqantg:Notify({ Title = "Delete failed", Content = "Pick a saved profile first.", Type = "Error" })
             end
         end })
+        sec:AddButton({ Name = "Refresh list", Callback = function() relist(nil) end })
+
+        local share = tab:AddSection("Share")
+        share:AddButton({ Name = "Copy share code", Callback = function()
+            local code = Yqantg:ExportConfig()
+            if Compat.copy(code) then
+                Yqantg:Notify({ Title = "Share code copied", Content = #code .. " characters", Type = "Success" })
+            else
+                Yqantg:Notify({ Title = "Clipboard unavailable", Content = "This executor can't copy text.", Type = "Warning" })
+            end
+        end })
+        local codeBox = share:AddInput({ Name = "Paste code", Placeholder = "YQ3:...", NoSave = true })
+        share:AddButton({ Name = "Import share code", Callback = function()
+            if Yqantg:ImportConfig(codeBox.Value) then
+                Yqantg:Notify({ Title = "Imported", Content = "Settings applied from share code.", Type = "Success" })
+            else
+                Yqantg:Notify({ Title = "Import failed", Content = "Code is invalid or damaged.", Type = "Error" })
+            end
+        end })
+
         local auto = Yqantg:GetAutoLoad()
-        local autoLbl = sec:AddLabel(auto and ("Auto-load: " .. auto) or "Auto-load: off")
-        sec:AddButton({ Name = "Set as auto-load", Callback = function()
+        local autoLbl = share:AddLabel(auto and ("Auto-load: " .. auto) or "Auto-load: off")
+        share:AddButton({ Name = "Set as auto-load", Callback = function()
             local n = list.Value
             if n and Yqantg:SetAutoLoad(n) then
                 autoLbl:Set("Auto-load: " .. tostring(n))
                 Yqantg:Notify({ Title = "Auto-load", Content = tostring(n), Type = "Success" })
             else
-                Yqantg:Notify({ Title = "Auto-load failed", Content = "Pick a saved config first.", Type = "Warning" })
+                Yqantg:Notify({ Title = "Auto-load failed", Content = "Pick a saved profile first.", Type = "Warning" })
             end
         end })
-        sec:AddButton({ Name = "Clear auto-load", Callback = function()
+        share:AddButton({ Name = "Clear auto-load", Callback = function()
             Yqantg:SetAutoLoad(nil); autoLbl:Set("Auto-load: off")
         end })
         return tab
