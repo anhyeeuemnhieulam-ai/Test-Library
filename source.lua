@@ -108,6 +108,8 @@ local CoreGui          = svc("CoreGui")
 local HttpService      = svc("HttpService")
 local Lighting         = svc("Lighting")
 local ContextActionService = svc("ContextActionService")
+local LogService       = svc("LogService")
+local ScriptContext    = svc("ScriptContext")
 
 
 if not game:IsLoaded() then pcall(function() game.Loaded:Wait() end) end
@@ -305,8 +307,8 @@ local Yqantg = {
     AutoLoad     = true,     -- apply the saved auto-load config once the script has built its UI
     BlockInput   = true,     -- sink camera / game input while the pointer is over the UI
     Decor        = true,     -- outer HUD (photo cards / brackets / sparks outside the window)
-    AnimeGender  = "Both",   -- "Both" | "Girl" | "Boy"
-    AnimeCustom  = { Girl = {}, Boy = {} },  -- your own pictures (rbxassetid / url)
+    AnimeGender  = "Both",   -- "Both" | "Girl" | "Boy" | "Flower" | "Space" | "Scenery" | "City" | "Mix"
+    AnimeCustom  = { Girl = {}, Boy = {}, Flower = {}, Space = {}, Scenery = {}, City = {} },  -- your own pictures (rbxassetid / url)
     GalleryRotate   = true,  -- outer photo cards swap pictures by themselves
     GalleryInterval = 30,    -- seconds between swaps
     ConfigPerGame   = false, -- true = profiles are stored per PlaceId
@@ -642,31 +644,58 @@ function Yqantg:_download(url)
     if ok and asset then imgCache[url] = asset; return asset end
 end
 
--- ===== anime pool: GIRL + BOY ======================================================
--- Yqantg.AnimeGender = "Both" | "Girl" | "Boy"     (filters notify icons / orb / backgrounds)
--- Yqantg.AnimeCustom = { Girl = { id|url, ... }, Boy = { id|url, ... } }   your own pictures
---   (rbxassetid / numeric ids work on every executor, urls need writefile + getcustomasset)
+-- ===== anime pool: GIRL / BOY / FLOWER / SPACE / SCENERY / CITY / MIX ================
+-- Yqantg.AnimeGender = "Both" (girl+boy) | "Girl" | "Boy" | "Flower" | "Space" | "Scenery" | "City" | "Mix"
+--   filters notify icons / orb / backgrounds / outer photo cards
+-- Yqantg.AnimeCustom = { Girl = {id|url}, Boy = {...}, Flower = {...}, Space = {...}, Scenery = {...}, City = {...} }
+--   your own pictures (rbxassetid / numeric ids work on every executor, urls need writefile + getcustomasset)
 local function nb(j) return j.results and j.results[1] and j.results[1].url end
 local function wp(j) return j.url end
+local function wh(j)   -- wallhaven (SFW only)
+    local d = j.data
+    if type(d) ~= "table" or #d == 0 then return nil end
+    local e = d[math.random(#d)]
+    return (e.thumbs and e.thumbs.large) or e.path
+end
+local function nasa(j) local e = j[1]; return e and e.media_type == "image" and e.url or nil end
+local function WH(q) return { "https://wallhaven.cc/api/v1/search?q=" .. q .. "&categories=010&purity=100&sorting=random", wh } end
+local function RAW(u) return { u, false } end   -- the url itself is the picture
 local ANIME_SRC = {
     Girl = {
-        { "https://api.waifu.pics/sfw/waifu", wp },
-        { "https://api.waifu.pics/sfw/shinobu", wp },
-        { "https://api.waifu.pics/sfw/megumin", wp },
-        { "https://api.waifu.pics/sfw/neko", wp },
-        { "https://nekos.best/api/v2/waifu", nb },
-        { "https://nekos.best/api/v2/neko", nb },
-        { "https://nekos.best/api/v2/kitsune", nb },
+        { "https://api.waifu.pics/sfw/waifu", wp }, { "https://api.waifu.pics/sfw/shinobu", wp },
+        { "https://api.waifu.pics/sfw/megumin", wp }, { "https://api.waifu.pics/sfw/neko", wp },
+        { "https://nekos.best/api/v2/waifu", nb }, { "https://nekos.best/api/v2/neko", nb },
+        { "https://nekos.best/api/v2/kitsune", nb }, WH("anime+girl"),
     },
     Boy = {
-        { "https://nekos.best/api/v2/husbando", nb },
+        { "https://nekos.best/api/v2/husbando", nb }, WH("anime+boy"), WH("anime+guy"), WH("anime+boy+cool"),
+    },
+    Flower = {
+        WH("anime+flowers"), WH("anime+sakura"), WH("anime+flower+field"), WH("anime+cherry+blossom"),
+        RAW("https://loremflickr.com/720/960/flower"),
+    },
+    Space = {
+        WH("anime+galaxy"), WH("anime+space+stars"), WH("anime+night+sky"), WH("anime+nebula"),
+        { "https://api.nasa.gov/planetary/apod?api_key=DEMO_KEY&count=1", nasa },
+        RAW("https://loremflickr.com/720/960/galaxy"),
+    },
+    Scenery = {
+        WH("anime+scenery"), WH("anime+landscape"), WH("anime+mountain+lake"), WH("anime+sunset"),
+    },
+    City = {
+        WH("anime+city+night"), WH("cyberpunk+anime+city"), WH("anime+neon"), WH("anime+tokyo"),
     },
 }
+local CAT_LIST = { "Girl", "Boy", "Flower", "Space", "Scenery", "City" }
+local CAT_LOWER = { mix = "Mix", both = "Both" }
+for _, n in ipairs(CAT_LIST) do CAT_LOWER[n:lower()] = n end
 
 local function resolveGender(self, g)
-    if g == "Girl" or g == "Boy" then return g end
+    if g and ANIME_SRC[g] then return g end
+    if g == "Mix" then return CAT_LIST[math.random(#CAT_LIST)] end
     local pref = self.AnimeGender
-    if pref == "Girl" or pref == "Boy" then return pref end
+    if pref and ANIME_SRC[pref] then return pref end
+    if pref == "Mix" then return CAT_LIST[math.random(#CAT_LIST)] end
     return (math.random() < 0.5) and "Girl" or "Boy"
 end
 
@@ -700,7 +729,11 @@ function Yqantg:_randomAnime(gender)
     for _ = 1, 6 do
         if self._unloaded then return nil end
         local api = list[math.random(#list)]
-        local raw = httpGet(api[1])
+        if api[2] == false then
+            local a = self:_download(api[1] .. "?random=" .. math.random(1, 1000000000))
+            if a then return a, g end
+        end
+        local raw = api[2] and httpGet(api[1])
         if raw then
             local ok, j = pcall(HttpService.JSONDecode, HttpService, raw)
             local url = ok and type(j) == "table" and api[2](j)
@@ -718,8 +751,8 @@ end
 function Yqantg:_warmPool(n, gender)
     if self._warming or not self.AnimeIcons or not Compat.canAssets then return end
     self._warming = true
-    self._pool = self._pool or { Girl = {}, Boy = {} }
-    self._waiters = self._waiters or { Girl = {}, Boy = {} }
+    self._pool = self._pool or {}
+    self._waiters = self._waiters or {}
     task.spawn(function()
         local got = 0
         for i = 1, n do
@@ -727,15 +760,18 @@ function Yqantg:_warmPool(n, gender)
             local g = gender
             if not g then
                 local pref = self.AnimeGender
-                g = (pref == "Girl" or pref == "Boy") and pref or ((i % 2 == 1) and "Girl" or "Boy")
+                if pref and ANIME_SRC[pref] then g = pref
+                elseif pref == "Mix" then g = CAT_LIST[math.random(#CAT_LIST)]
+                else g = (i % 2 == 1) and "Girl" or "Boy" end
             end
             local a = self:_randomAnime(g)
             if a then
                 got = got + 1
+                self._pool[g] = self._pool[g] or {}
                 local pool = self._pool[g]
                 table.insert(pool, a)
                 if #pool > 24 then table.remove(pool, 1) end
-                local w = self._waiters[g]
+                local w = self._waiters[g] or {}
                 self._waiters[g] = {}
                 for _, cb in ipairs(w) do pcall(cb, pool[math.random(#pool)]) end
             end
@@ -754,7 +790,8 @@ local function pickAnime(self, cb, gender)
     local g = resolveGender(self, gender)
     local pool = self._pool and self._pool[g]
     if pool and #pool > 0 then cb(pool[math.random(#pool)]); return end
-    self._waiters = self._waiters or { Girl = {}, Boy = {} }
+    self._waiters = self._waiters or {}
+    self._waiters[g] = self._waiters[g] or {}
     table.insert(self._waiters[g], cb)
     self:_warmPool(4, g)
 end
@@ -767,8 +804,8 @@ function Yqantg:_image(src, cb)
     local g
     if src == nil or src == true or src == "anime" then
         g = "Both"
-    elseif type(src) == "string" and (src:lower() == "girl" or src:lower() == "boy") then
-        g = (src:lower() == "girl") and "Girl" or "Boy"
+    elseif type(src) == "string" and CAT_LOWER[src:lower()] then
+        g = CAT_LOWER[src:lower()]
     end
     if g then
         g = resolveGender(self, g)
@@ -958,6 +995,32 @@ end
 
 -- multi-touch safe tracking: a drag only follows the finger (InputObject) that started it.
 -- mouse: any MouseMovement / MouseButton1 counts.
+-- anti-misswipe for sliders: a finger only grabs a slider after a clear HORIZONTAL swipe (or a 0.3 s hold).
+-- Vertical swipes fall through to page scrolling and plain taps do nothing. Mouse = immediate.
+-- Turn off with  Yqantg.SliderGuard = false
+local function guardTouch(input, arm, abort)
+    if input.UserInputType ~= Enum.UserInputType.Touch or Yqantg.SliderGuard == false then arm(); return end
+    local sx, sy = input.Position.X, input.Position.Y
+    local settled, conn = false, nil
+    local function finish() settled = true; if conn then conn:Disconnect(); conn = nil end end
+    conn = UserInputService.InputChanged:Connect(function(i)
+        if settled or i ~= input then return end
+        local dx, dy = math.abs(i.Position.X - sx), math.abs(i.Position.Y - sy)
+        if dx > 8 and dx > dy * 1.5 then finish(); arm()
+        elseif dy > 8 then finish(); abort() end
+    end)
+    input.Changed:Connect(function()
+        if input.UserInputState == Enum.UserInputState.End and not settled then finish(); abort() end
+    end)
+    task.delay(0.3, function()
+        if settled then return end
+        if math.abs(input.Position.X - sx) < 8 and math.abs(input.Position.Y - sy) < 8
+            and input.UserInputState ~= Enum.UserInputState.End then
+            finish(); arm()
+        end
+    end)
+end
+
 local function ownsMove(tracked, i)
     if not tracked then return false end
     if tracked.UserInputType == Enum.UserInputType.Touch then return i == tracked end
@@ -2484,20 +2547,27 @@ function Section:AddSlider(o)
     local function knobSize(n) tween(knob, 0.2, { Size = UDim2.fromOffset(n, n) }, Enum.EasingStyle.Back) end
     hit.MouseEnter:Connect(function() hovering = true; if not dragging then knobSize(15) end end)
     hit.MouseLeave:Connect(function() hovering = false; if not dragging then knobSize(12) end end)
+    local armed = false
     hit.InputBegan:Connect(function(i)
         if isPress(i) and not dragging then
-            dragging = true; sTrack = i
-            knobSize(18)
-            tween(halo, 0.3, { Size = UDim2.fromOffset(36, 36) }, Enum.EasingStyle.Back)
-            tween(v, 0.15, { TextColor3 = resolve("Accent"), TextSize = 14 })
-            self.Tab.Page.ScrollingEnabled = false
-            fromInput(i.Position)
+            dragging = true; sTrack = i; armed = false
+            guardTouch(i, function()
+                if sTrack ~= i then return end
+                armed = true
+                knobSize(18)
+                tween(halo, 0.3, { Size = UDim2.fromOffset(36, 36) }, Enum.EasingStyle.Back)
+                tween(v, 0.15, { TextColor3 = resolve("Accent"), TextSize = 14 })
+                self.Tab.Page.ScrollingEnabled = false
+                fromInput(i.Position)
+            end, function()
+                if sTrack == i then dragging = false; armed = false; sTrack = nil end
+            end)
         end
     end)
-    connect(UserInputService.InputChanged, function(i) if dragging and ownsMove(sTrack, i) then fromInput(i.Position) end end)
+    connect(UserInputService.InputChanged, function(i) if dragging and armed and ownsMove(sTrack, i) then fromInput(i.Position) end end)
     connect(UserInputService.InputEnded, function(i)
         if dragging and ownsEnd(sTrack, i) then
-            dragging = false
+            dragging = false; armed = false
             self.Tab.Page.ScrollingEnabled = true
             knobSize(hovering and 15 or 12)
             tween(halo, 0.25, { Size = UDim2.fromOffset(0, 0) })
@@ -3205,6 +3275,7 @@ function Section:AddRangeSlider(o)
     end
 
     local tracked, which
+    local rArmed = false
     local function move(x)
         local val = snap(x)
         if which == 1 then a = math.min(val, b) else b = math.max(val, a) end
@@ -3219,7 +3290,10 @@ function Section:AddRangeSlider(o)
     end
     hit.InputBegan:Connect(function(i)
         if isPress(i) and not tracked then
-            tracked = i
+            tracked = i; rArmed = false
+            guardTouch(i, function()
+            if tracked ~= i then return end
+            rArmed = true
             local val = snap(i.Position.X)
             -- grab the nearer handle (if both overlap, pick by side)
             local da, db = math.abs(val - a), math.abs(val - b)
@@ -3227,9 +3301,12 @@ function Section:AddRangeSlider(o)
             self.Tab.Page.ScrollingEnabled = false
             tween(which == 1 and s1 or s2, 0.15, { Scale = 1.25 }, Enum.EasingStyle.Back)
             move(i.Position.X)
+            end, function()
+                if tracked == i then tracked = nil; rArmed = false end
+            end)
         end
     end)
-    connect(UserInputService.InputChanged, function(i) if tracked and ownsMove(tracked, i) then move(i.Position.X) end end)
+    connect(UserInputService.InputChanged, function(i) if tracked and rArmed and ownsMove(tracked, i) then move(i.Position.X) end end)
     connect(UserInputService.InputEnded, function(i) if tracked and ownsEnd(tracked, i) then release() end end)
 
     function obj:Set(v, silent)
@@ -4261,8 +4338,8 @@ function Yqantg:CreateWindow(cfg)
             -- photo stacks
             local function cardGender(side)
                 local pref = Yqantg.AnimeGender
-                if pref == "Girl" or pref == "Boy" then return pref end
-                return side == "L" and "Boy" or "Girl"
+                if pref == "Both" or pref == nil then return side == "L" and "Boy" or "Girl" end
+                return resolveGender(Yqantg, nil)
             end
             local function makeCard(side)
                 local left = side == "L"
@@ -4642,10 +4719,15 @@ function Yqantg:CreateWindow(cfg)
     gradient(ipip, "AccentGrad").Rotation = 90
 
     local tabList = create("ScrollingFrame", {
-        Position = UDim2.fromOffset(6, 42), Size = UDim2.new(1, -12, 1, -48), BackgroundTransparency = 1,
+        Position = UDim2.fromOffset(6, 42), Size = UDim2.new(1, -12, 1, -92), BackgroundTransparency = 1,
         BorderSizePixel = 0, ScrollBarThickness = 0, AutomaticCanvasSize = Enum.AutomaticSize.Y, CanvasSize = UDim2.new(), Parent = side,
     })
     create("UIListLayout", { Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder, Parent = tabList })
+    -- pinned footer: tabs created with { Pinned = true } live here, always visible under the list
+    local pinSep = create("Frame", { AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 10, 1, -44), Size = UDim2.new(1, -20, 0, 1), BorderSizePixel = 0, BackgroundTransparency = 0.5, Parent = side })
+    bind(pinSep, "BackgroundColor3", "Stroke")
+    local pinHolder = create("Frame", { AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 6, 1, -6), Size = UDim2.new(1, -12, 0, 34), BackgroundTransparency = 1, Parent = side })
+    create("UIListLayout", { Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder, VerticalAlignment = Enum.VerticalAlignment.Bottom, Parent = pinHolder })
 
     local content = create("Frame", { Position = UDim2.fromOffset(SIDE, 0), Size = UDim2.new(1, -SIDE, 1, 0), BackgroundTransparency = 1, ClipsDescendants = true, Parent = Body })
 
@@ -4693,7 +4775,7 @@ function Yqantg:CreateWindow(cfg)
     search:GetPropertyChangedSignal("Text"):Connect(function()
         local q = search.Text:lower()
         for _, t in ipairs(Window.Tabs) do
-            t.Button.Visible = q == "" or t.Name:lower():find(q, 1, true) ~= nil
+            t.Button.Visible = q == "" or t.Pinned == true or t.Name:lower():find(q, 1, true) ~= nil
         end
     end)
 
@@ -4845,19 +4927,26 @@ function Yqantg:CreateWindow(cfg)
             tween(kscale, 0.2, { Scale = 1 }, Enum.EasingStyle.Back)
             if commitOnRelease and shown ~= nil then set(shown); render() end
         end
+        local armed = false
         hit.InputBegan:Connect(function(i)
             if isPress(i) and not tracked then
-                tracked = i
-                gx, gw = track.AbsolutePosition.X, track.AbsoluteSize.X
-                scroll.ScrollingEnabled = false
-                tween(kscale, 0.15, { Scale = 1.25 }, Enum.EasingStyle.Back)
-                drag(i.Position.X)
+                tracked = i; armed = false
+                guardTouch(i, function()
+                    if tracked ~= i then return end
+                    armed = true
+                    gx, gw = track.AbsolutePosition.X, track.AbsoluteSize.X
+                    scroll.ScrollingEnabled = false
+                    tween(kscale, 0.15, { Scale = 1.25 }, Enum.EasingStyle.Back)
+                    drag(i.Position.X)
+                end, function()
+                    if tracked == i then tracked = nil; armed = false end
+                end)
                 i.Changed:Connect(function()
                     if i.UserInputState == Enum.UserInputState.End and tracked == i then finish() end
                 end)
             end
         end)
-        connect(UserInputService.InputChanged, function(i) if tracked and ownsMove(tracked, i) then drag(i.Position.X) end end)
+        connect(UserInputService.InputChanged, function(i) if tracked and armed and ownsMove(tracked, i) then drag(i.Position.X) end end)
         connect(UserInputService.InputEnded, function(i) if tracked and ownsEnd(tracked, i) then finish() end end)
     end
 
@@ -4949,7 +5038,8 @@ function Yqantg:CreateWindow(cfg)
         local applyTo = "BG"
         local galleryFill
 
-        local function chipRow(items, current, onPick)
+        local group = {}
+        local function chipRow(items, current, onPick, shared)
             local r = create("Frame", { Size = UDim2.new(1, 0, 0, 26), BackgroundTransparency = 1, LayoutOrder = nextLO(galCard), ZIndex = 33, Parent = galCard })
             create("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder, Parent = r })
             local chips = {}
@@ -4965,18 +5055,24 @@ function Yqantg:CreateWindow(cfg)
                 local tl = text(b, it[2], 10, "Text", Enum.Font.GothamBold)
                 tl.Size = UDim2.fromScale(1, 1); tl.TextXAlignment = Enum.TextXAlignment.Center; tl.ZIndex = 35
                 chips[it[1]] = stroke(b, "Accent", 1.4, 1)
-                b.MouseButton1Click:Connect(function() Yqantg:_sfx("Click"); onPick(it[1]); paint() end)
+                b.MouseButton1Click:Connect(function()
+                    Yqantg:_sfx("Click"); onPick(it[1])
+                    if shared then for _, f in ipairs(shared) do f() end else paint() end
+                end)
             end
             onTheme(paint); paint()
+            if shared then shared[#shared + 1] = paint end
+            return paint
         end
 
-        chipRow({ { "Both", "BOTH" }, { "Girl", "GIRL" }, { "Boy", "BOY" } },
-            function() return Yqantg.AnimeGender or "Both" end,
-            function(g)
-                Yqantg.AnimeGender = g
-                Window:ShuffleCards()
-                if galleryFill then galleryFill() end
-            end)
+        local function pickCat(c)
+            Yqantg.AnimeGender = c
+            Window:ShuffleCards()
+            if galleryFill then galleryFill() end
+        end
+        local curCat = function() return Yqantg.AnimeGender or "Both" end
+        chipRow({ { "Both", "BOTH" }, { "Girl", "GIRL" }, { "Boy", "BOY" }, { "Mix", "MIX" } }, curCat, pickCat, group)
+        chipRow({ { "Flower", "FLOWER" }, { "Space", "SPACE" }, { "Scenery", "SCENERY" }, { "City", "CITY" } }, curCat, pickCat, group)
         chipRow({ { "BG", "BACKGROUND" }, { "L", "LEFT CARD" }, { "R", "RIGHT CARD" } },
             function() return applyTo end,
             function(k) applyTo = k end)
@@ -5023,8 +5119,9 @@ function Yqantg:CreateWindow(cfg)
             task.spawn(function()
                 for i, it in ipairs(thumbs) do
                     if Yqantg._unloaded or not it.btn.Parent then break end
-                    local g = Yqantg.AnimeGender
-                    if g ~= "Girl" and g ~= "Boy" then g = (i % 2 == 1) and "Girl" or "Boy" end
+                    local g
+                    if Yqantg.AnimeGender == "Both" or Yqantg.AnimeGender == nil then g = (i % 2 == 1) and "Girl" or "Boy"
+                    else g = resolveGender(Yqantg, nil) end
                     local asset = Yqantg:_randomAnime(g)
                     if not asset then Yqantg:_image(string.lower(g), function(a) asset = a end) end
                     if asset and it.btn.Parent then
@@ -5615,7 +5712,7 @@ function Yqantg:CreateWindow(cfg)
         task.spawn(function()
             RunService.Heartbeat:Wait()
             if tab.Button.Parent and Window.ActiveTab == tab then
-                local y = 42 + (tab.Button.AbsolutePosition.Y - tabList.AbsolutePosition.Y) / scale.Scale
+                local y = (tab.Button.AbsolutePosition.Y - side.AbsolutePosition.Y) / scale.Scale
                 if not indicator.Visible then
                     indicator.Position = UDim2.fromOffset(6, y)
                     indicator.Visible = true
@@ -5636,11 +5733,11 @@ function Yqantg:CreateWindow(cfg)
             local n = tostring(o.Name or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
             if n == "info" or n == "information" then return ghost() end   -- only the source's Info tab may exist
         end
-        local tab = setmetatable({ Name = o.Name or "Tab", Locked = o.Locked == true, Window = Window, Index = #Window.Tabs + 1, Fit = o.Fit }, Tab)
+        local tab = setmetatable({ Name = o.Name or "Tab", Locked = o.Locked == true, Window = Window, Index = #Window.Tabs + 1, Fit = o.Fit, Pinned = o.Pinned == true }, Tab)
 
         local b = create("TextButton", {
             Size = UDim2.new(1, 0, 0, 32), BackgroundColor3 = WHITE, BackgroundTransparency = 1,
-            BorderSizePixel = 0, AutoButtonColor = false, Text = "", LayoutOrder = #Window.Tabs + 1, Parent = tabList,
+            BorderSizePixel = 0, AutoButtonColor = false, Text = "", LayoutOrder = #Window.Tabs + 1, Parent = o.Pinned and pinHolder or tabList,
         })
         corner(b, 5)
         b.ClipsDescendants = true
@@ -5876,6 +5973,612 @@ function Yqantg:CreateWindow(cfg)
         ic:AddStats()
         infoTab._sealed = true
         SEAL.build = false
+    end
+
+    -- ===== BUILT-IN CONSOLE TAB (pinned at the bottom of the sidebar) ===================
+    -- real Roblox output (LogService.MessageOut + ScriptContext.Error traces), filters, search,
+    -- CLEAR / COPY / PAUSE, ERRORS view (duplicates merged) and a SMART FIX guide.
+    -- The guide is an offline rule-based assistant (no network, nothing is sent anywhere).
+    do
+        local MAXN = tonumber(Yqantg.ConsoleMax) or 500
+        local tab = Window:AddTab({ Name = "Console", Pinned = true })
+        tab.Page.ScrollingEnabled = false
+        tab.Page.ScrollBarThickness = 0
+        local sec = tab:AddSection({ Side = "Full", NoHeader = true })
+        local root = create("Frame", { Size = UDim2.new(1, 0, 0, 260), BackgroundTransparency = 1, Parent = sec.Body })
+
+        local TAGC = { "#c8c8d0", "#6ec1ff", "#ffc04d", "#ff5a6a" }
+        local TAGN = { "LOG", "INFO", "WARN", "ERR" }
+        local KIND = {
+            [Enum.MessageType.MessageOutput] = 1, [Enum.MessageType.MessageInfo] = 2,
+            [Enum.MessageType.MessageWarning] = 3, [Enum.MessageType.MessageError] = 4,
+        }
+        local function hex(c) return ("#%02x%02x%02x"):format(math.floor(c.R * 255 + .5), math.floor(c.G * 255 + .5), math.floor(c.B * 255 + .5)) end
+        local function rt(s) return (tostring(s):gsub("&", "&amp;"):gsub("<", "&lt;"):gsub(">", "&gt;")) end
+        local function plainOf(s)
+            return (s:gsub("<[^>]+>", ""):gsub("&lt;", "<"):gsub("&gt;", ">"):gsub("&amp;", "&"))
+        end
+
+        local function mini(parent, label, order)
+            local b = create("TextButton", { BorderSizePixel = 0, AutoButtonColor = false, Text = "", LayoutOrder = order or 0, Parent = parent })
+            bind(b, "BackgroundColor3", "Element"); corner(b, 5)
+            local st = stroke(b, "Stroke", 1, 0.35)
+            local l = text(b, label, 10, "Text", Enum.Font.GothamBold)
+            l.Size = UDim2.fromScale(1, 1); l.TextXAlignment = Enum.TextXAlignment.Center
+            b.MouseEnter:Connect(function() tween(st, 0.15, { Color = resolve("Accent"), Transparency = 0 }) end)
+            b.MouseLeave:Connect(function() tween(st, 0.2, { Color = resolve("Stroke"), Transparency = 0.35 }) end)
+            b.MouseButton1Down:Connect(function(x) ripple(b, x, scale, 0.8) end)
+            return b, l
+        end
+        local function lit(b, l, on)
+            tween(b, 0.15, { BackgroundColor3 = on and resolve("Stroke") or resolve("Element") })
+            tween(l, 0.15, { TextColor3 = on and resolve("Accent") or resolve("Text") })
+        end
+
+        ---------------------------------------------------------------- toolbar
+        local bar = create("Frame", { Size = UDim2.new(1, 0, 0, 26), BackgroundTransparency = 1, Parent = root })
+        create("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder, Parent = bar })
+        local function tbtn(label, i)
+            local b, l = mini(bar, label, i)
+            b.Size = UDim2.new(0.2, -3.2, 1, 0)
+            return b, l
+        end
+        local bClear = tbtn("CLEAR", 1)
+        local bCopy = tbtn("COPY", 2)
+        local bPause, lPause = tbtn("PAUSE", 3)
+        local bErr, lErr = tbtn("ERRORS", 4)
+        local bFix = tbtn("SMART FIX", 5)
+
+        ---------------------------------------------------------------- filters + search
+        local frow = create("Frame", { Position = UDim2.fromOffset(0, 30), Size = UDim2.new(1, 0, 0, 24), BackgroundTransparency = 1, Parent = root })
+        local chipHolder = create("Frame", { Size = UDim2.new(0, 236, 1, 0), BackgroundTransparency = 1, Parent = frow })
+        create("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder, Parent = chipHolder })
+        local FILTERS = { "ALL", "LOG", "WARN", "ERR" }
+        local filter, chips = "ALL", {}
+        local needRebuild, statsDirty = true, true
+        for i, f in ipairs(FILTERS) do
+            local b, l = mini(chipHolder, f, i)
+            b.Size = UDim2.fromOffset(56, 24)
+            chips[f] = { b = b, l = l }
+            b.MouseButton1Click:Connect(function()
+                Yqantg:_sfx("Click"); filter = f; needRebuild = true; statsDirty = true
+            end)
+        end
+        local search = create("TextBox", {
+            Position = UDim2.fromOffset(242, 0), Size = UDim2.new(1, -242, 1, 0), BorderSizePixel = 0, Text = "",
+            PlaceholderText = "Search console...", TextSize = 11, Font = Enum.Font.Gotham, ClearTextOnFocus = false,
+            TextXAlignment = Enum.TextXAlignment.Left, Parent = frow,
+        })
+        bind(search, "BackgroundColor3", "Element"); bind(search, "TextColor3", "Text"); bind(search, "PlaceholderColor3", "SubText")
+        corner(search, 5); stroke(search, "Stroke", 1, 0.5)
+        create("UIPadding", { PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8), Parent = search })
+        search:GetPropertyChangedSignal("Text"):Connect(function() needRebuild = true end)
+
+        ---------------------------------------------------------------- log list
+        local listFrame = create("Frame", { Position = UDim2.fromOffset(0, 60), Size = UDim2.new(1, 0, 0, 160), BorderSizePixel = 0, ClipsDescendants = true, Parent = root })
+        bind(listFrame, "BackgroundColor3", "Panel"); corner(listFrame, 6); stroke(listFrame, "Stroke", 1, 0.45)
+        local list = create("ScrollingFrame", {
+            Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 3,
+            AutomaticCanvasSize = Enum.AutomaticSize.Y, CanvasSize = UDim2.new(), Parent = listFrame,
+        })
+        bind(list, "ScrollBarImageColor3", "Accent")
+        create("UIPadding", { PaddingTop = UDim.new(0, 4), PaddingBottom = UDim.new(0, 4), PaddingLeft = UDim.new(0, 4), PaddingRight = UDim.new(0, 6), Parent = list })
+        create("UIListLayout", { Padding = UDim.new(0, 1), SortOrder = Enum.SortOrder.LayoutOrder, Parent = list })
+        local emptyLbl = text(listFrame, "Console is empty - waiting for output...", 11, "SubText", Enum.Font.Gotham)
+        emptyLbl.Size = UDim2.fromScale(1, 1); emptyLbl.TextXAlignment = Enum.TextXAlignment.Center
+
+        ---------------------------------------------------------------- smart fix panel
+        local detail = create("Frame", { Size = UDim2.new(1, 0, 0, 120), BorderSizePixel = 0, Visible = false, ClipsDescendants = true, Parent = root })
+        bind(detail, "BackgroundColor3", "Side"); corner(detail, 6); stroke(detail, "Accent", 1, 0.3)
+        local dTitle = text(detail, "SMART FIX  ·  offline analysis", 10, "Accent", Enum.Font.GothamBold)
+        dTitle.Position = UDim2.fromOffset(10, 0); dTitle.Size = UDim2.new(1, -120, 0, 24)
+        local dClose = mini(detail, "X", 0); dClose.AnchorPoint = Vector2.new(1, 0); dClose.Position = UDim2.new(1, -4, 0, 3); dClose.Size = UDim2.fromOffset(24, 18)
+        local dCopy = mini(detail, "COPY FIX", 0); dCopy.AnchorPoint = Vector2.new(1, 0); dCopy.Position = UDim2.new(1, -32, 0, 3); dCopy.Size = UDim2.fromOffset(64, 18)
+        local dBody = create("ScrollingFrame", {
+            Position = UDim2.fromOffset(0, 24), Size = UDim2.new(1, 0, 1, -24), BackgroundTransparency = 1, BorderSizePixel = 0,
+            ScrollBarThickness = 3, AutomaticCanvasSize = Enum.AutomaticSize.Y, CanvasSize = UDim2.new(), Parent = detail,
+        })
+        bind(dBody, "ScrollBarImageColor3", "Accent")
+        create("UIPadding", { PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 12), PaddingBottom = UDim.new(0, 8), Parent = dBody })
+        local dText = create("TextLabel", {
+            BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, RichText = true,
+            TextWrapped = true, TextSize = 11, Font = Enum.Font.Gotham, TextXAlignment = Enum.TextXAlignment.Left,
+            TextYAlignment = Enum.TextYAlignment.Top, Text = "", Parent = dBody,
+        })
+        bind(dText, "TextColor3", "Text")
+
+        ---------------------------------------------------------------- layout (fills the tab)
+        local H, detailOpen = 260, false
+        local function relayout()
+            local dH = detailOpen and math.floor(H * 0.52) or 0
+            listFrame.Size = UDim2.new(1, 0, 0, math.max(H - 60 - (detailOpen and (dH + 6) or 0), 60))
+            detail.Visible = detailOpen
+            detail.Position = UDim2.new(0, 0, 0, H - dH)
+            detail.Size = UDim2.new(1, 0, 0, dH)
+            root.Size = UDim2.new(1, 0, 0, H)
+        end
+        local function fit()
+            local h = tab.Page.AbsoluteWindowSize.Y / math.max(scale.Scale, 0.01) - 22
+            if h > 100 then H = math.max(h, 230); relayout() end
+        end
+        tab.Page:GetPropertyChangedSignal("AbsoluteWindowSize"):Connect(fit)
+        task.defer(fit); relayout()
+
+        ---------------------------------------------------------------- smart fix rules
+        local EXEC = {}
+        for n in ([[writefile readfile isfile listfiles delfile makefolder isfolder getcustomasset getsynasset setclipboard toclipboard
+            getgenv getrenv getrawmetatable setreadonly hookfunction hookmetamethod newcclosure checkcaller fireclickdetector
+            firetouchinterest fireproximityprompt firesignal getconnections request http_request syn queue_on_teleport loadstring
+            gethui cloneref getnilinstances decompile identifyexecutor getthreadidentity setthreadidentity Drawing mousemoverel keypress isrbxactive]]):gmatch("%S+") do
+            EXEC[n] = true
+        end
+        local CHAR = { Humanoid = true, Character = true, HumanoidRootPart = true, PlayerGui = true, Backpack = true, Head = true, Torso = true }
+
+        local RULES = {
+            { p = "attempt to index nil with '([^']+)'", title = "A variable is nil (attempt to index nil)", fn = function(c)
+                local steps = {
+                    "Find the line shown in \"Where\" and look at the variable right BEFORE the dot - that is the nil one.",
+                    "Print it just above the line:  print(thatVariable)  to confirm it is nil.",
+                    "If it is an Instance that loads later, use :WaitForChild(\"Name\", 5) instead of dot access.",
+                    "Guard the use:  if thatVariable then ... end",
+                }
+                if CHAR[c[1]] then steps[#steps + 1] = "'" .. c[1] .. "' usually means the character has not spawned yet - wait for it (see example)." end
+                return ("Your script tried to read '%s' from something that is nil, so the object in front of the dot does not exist (yet)."):format(c[1]), steps,
+                    "local char = player.Character or player.CharacterAdded:Wait()\nlocal hum = char:WaitForChild(\"Humanoid\", 5)\nif hum then\n    hum.WalkSpeed = 16\nend"
+            end },
+            { p = "attempt to index (%a+) with '?([^']*)'?", title = "Indexing the wrong type", fn = function(c)
+                return ("A value of type '%s' was used like a table/Instance (indexed with '%s')."):format(c[1], c[2]), {
+                    "Print typeof(value) before the failing line.",
+                    "A function was probably used without calling it - add () : getThing().Name instead of getThing.Name.",
+                    "Check that a variable was not overwritten by a number/string with the same name.",
+                }, "print(typeof(value))   --> should be 'table' or 'Instance'"
+            end },
+            { p = "attempt to call a nil value %((%a+) '([^']+)'%)", title = "Calling a function that does not exist", fn = function(c)
+                if EXEC[c[2]] then
+                    return ("'%s' is an executor function and your executor does not provide it."):format(c[2]), {
+                        "Check that your executor supports it (UNC level / identifyexecutor()).",
+                        "Always guard optional executor functions:  if " .. c[2] .. " then ... end",
+                        "Provide a fallback so the script still works without it.",
+                    }, "local copy = setclipboard or toclipboard\nif copy then copy(\"text\") end"
+                end
+                return ("The %s '%s' is nil, so there is nothing to call."):format(c[1], c[2]), {
+                    "Check spelling and capital letters of '" .. c[2] .. "' - Lua is case-sensitive.",
+                    "Make sure it is defined BEFORE the line that calls it (local functions must be above).",
+                    "If it comes from a ModuleScript, check that the module returns it and you required the right one.",
+                    "Method calls need a colon:  obj:Method()  not  obj.Method()",
+                }, "local function " .. c[2] .. "()\n    -- ...\nend\n" .. c[2] .. "()"
+            end },
+            { p = "attempt to call a nil value", title = "Calling a nil value", fn = function()
+                return "Something that should be a function is nil.", {
+                    "Look at the line in \"Where\" - the thing followed by ( ) is nil.",
+                    "Print it first: print(thatThing). Check spelling and that it is defined above.",
+                    "Optional executor/library functions must be checked with  if fn then ... end",
+                }, "if typeof(callback) == \"function\" then callback() end"
+            end },
+            { p = "attempt to perform arithmetic", title = "Math on a non-number", fn = function()
+                return "A calculation used nil, a string or a table instead of a number.", {
+                    "Print every value in the expression with typeof().",
+                    "Convert text with tonumber(x) and give it a default: tonumber(x) or 0.",
+                    "A nil usually means a missing field/attribute - check where it is set.",
+                }, "local n = tonumber(input) or 0\nlocal total = n + 5"
+            end },
+            { p = "attempt to compare", title = "Comparing incompatible values", fn = function()
+                return "A comparison (<, >, <=, >=) mixed different types, e.g. nil with a number.", {
+                    "Print both sides with typeof().",
+                    "Default the nil side: (value or 0) > 5",
+                    "Convert strings with tonumber() before comparing.",
+                }, "if (tonumber(value) or 0) > 5 then ... end"
+            end },
+            { p = "attempt to concatenate", title = "Joining text with a non-text value", fn = function()
+                return "The .. operator got nil, a table or a boolean.", {
+                    "Wrap values with tostring(): \"HP: \" .. tostring(hp)",
+                    "Or use string.format(\"HP: %d\", hp).",
+                    "Find which value is nil with print().",
+                }, "print(\"HP: \" .. tostring(hp))"
+            end },
+            { p = "([%w_]+) is not a valid member of ([%w_%.]+)", title = "Instance does not exist", fn = function(c)
+                return ("'%s' was not found inside '%s'. It has a different name, does not exist yet, or lives somewhere else."):format(c[1], c[2]), {
+                    "Check the exact name and capitals of '" .. c[1] .. "' (print(parent:GetChildren()) shows what is really there).",
+                    "If it is created later (character, GUI, streamed parts) use :WaitForChild(\"" .. c[1] .. "\", 5).",
+                    "Use :FindFirstChild(\"" .. c[1] .. "\") when it may be missing and handle nil.",
+                    "The game may have been updated and renamed/moved it.",
+                }, "local obj = parent:FindFirstChild(\"" .. c[1] .. "\") or parent:WaitForChild(\"" .. c[1] .. "\", 5)\nif obj then\n    -- use obj\nend"
+            end },
+            { p = "[Ii]nfinite yield possible on '([^']+)'", title = "WaitForChild never finishes", fn = function(c)
+                return ("Your script is waiting forever for '%s'. It never appears under that parent/name."):format(c[1]), {
+                    "Verify the path and spelling - this is the usual cause.",
+                    "Add a timeout so the script continues:  :WaitForChild(\"Name\", 5)",
+                    "Check the object is not created only on the server or after an event that has not happened.",
+                }, "local x = parent:WaitForChild(\"Name\", 5)\nif not x then warn(\"Name never loaded\") return end"
+            end },
+            { p = "HTTP (%d%d%d)", title = "HTTP request failed", fn = function(c)
+                local code = tonumber(c[1]) or 0
+                local why = ({ [400] = "bad request (wrong parameters/body)", [401] = "not authorized (missing/invalid key)", [403] = "forbidden (blocked, key lacks permission, or the site refuses Roblox)",
+                    [404] = "URL not found (dead link or typo)", [429] = "rate limited (too many requests)", [500] = "the server crashed", [502] = "bad gateway", [503] = "service unavailable", })[code] or "server returned an error"
+                return ("The web request returned HTTP %d: %s."):format(code, why), {
+                    "Open the URL in a browser to see if it still works.",
+                    "Wrap requests in pcall and retry with a delay (task.wait) for 429/5xx.",
+                    "Cache results instead of requesting every frame.",
+                }, "local ok, res = pcall(function() return game:HttpGet(url) end)\nif not ok then warn(res) end"
+            end },
+            { p = "[Hh]ttp requests are not enabled", title = "HttpService is disabled", fn = function()
+                return "HttpService requests are turned off in this game/context.", {
+                    "In Studio: Game Settings > Security > Allow HTTP Requests.",
+                    "In an executor use game:HttpGet / request instead of HttpService:GetAsync.",
+                }, "local body = (request and request({Url = url}).Body) or game:HttpGet(url)"
+            end },
+            { p = "[Ss]tack [Oo]verflow", title = "Stack overflow (endless recursion)", fn = function()
+                return "A function keeps calling itself (or a loop of functions) without ever stopping.", {
+                    "Find the function in the trace that repeats.",
+                    "Add a stop condition (return) at the top of the recursive function.",
+                    "Make sure an event handler is not firing the same event it listens to.",
+                }, "local function walk(n)\n    if n <= 0 then return end   -- stop condition\n    walk(n - 1)\nend"
+            end },
+            { p = "exhausted allowed execution time", title = "Script ran too long", fn = function()
+                return "A loop ran without yielding, so Roblox stopped the script.", {
+                    "Add task.wait() inside while/for loops that can run long.",
+                    "Split heavy work into chunks and yield between them.",
+                }, "while running do\n    -- work\n    task.wait()\nend"
+            end },
+            { p = "[Uu]nexpected symbol near '([^']*)'", title = "Syntax error", fn = function(c)
+                return ("The code has a typo near '%s' that Lua cannot read."):format(c[1]), {
+                    "Look at the line shown and the line just above it.",
+                    "Check for a missing ) ] } , or =, or a stray character.",
+                    "Make sure every 'then/do/function' has a matching 'end'.",
+                }, "if a == b then   -- 'then' required\n    print(\"ok\")\nend"
+            end },
+            { p = "[Ee]xpected '([^']+)'", title = "Syntax error (missing token)", fn = function(c)
+                return ("Lua expected '%s' but found something else."):format(c[1]), {
+                    "A block was not closed (end / ) / }) or a keyword is missing.",
+                    "Count your 'function/if/for/while' against your 'end'.",
+                    "A formatter/indent view makes the missing 'end' obvious.",
+                }, "for i = 1, 3 do\n    print(i)\nend"
+            end },
+            { p = "[Rr]equested module experienced an error", title = "ModuleScript failed to load", fn = function()
+                return "A ModuleScript you require() threw an error while loading.", {
+                    "Look at the error printed just ABOVE/BELOW this one - that is the real cause inside the module.",
+                    "Make sure the module returns exactly one value at the end.",
+                }, "local M = {}\nfunction M.hello() print(\"hi\") end\nreturn M"
+            end },
+            { p = "[Ff]ailed to load sound", title = "Asset failed to load", fn = function()
+                return "A sound/asset id is invalid, private, deleted or not allowed for this game.", {
+                    "Test the id in the Toolbox/browser.",
+                    "Use assets that are public or owned by the game owner.",
+                    "Swap in another id as a fallback.",
+                }, "sound.SoundId = \"rbxassetid://1234567890\""
+            end },
+            { p = "[Ii]nvalid argument #(%d+)", title = "Wrong argument passed to a function", fn = function(c)
+                return ("Argument #%s has the wrong type or value."):format(c[1]), {
+                    "Look up the function and check what argument " .. c[1] .. " should be.",
+                    "Print typeof() of the value you pass.",
+                    "Don't pass nil - provide a default.",
+                }, "print(typeof(arg" .. c[1] .. "))"
+            end },
+            { p = "[Aa]rgument (%d+) missing or nil", title = "Missing argument", fn = function(c)
+                return ("Argument %s was nil or not passed at all."):format(c[1]), {
+                    "Pass a real value for that argument.",
+                    "Check the variable you pass is not nil (print it).",
+                }, "fn(value or defaultValue)"
+            end },
+            { p = "[Uu]nable to cast", title = "Value has the wrong type", fn = function()
+                return "A property/argument received a value of an incompatible type.", {
+                    "Check the property's expected type (Color3 vs BrickColor, number vs string...).",
+                    "Convert before assigning: tonumber(), tostring(), Color3.fromRGB().",
+                }, "part.Color = Color3.fromRGB(255, 0, 0)"
+            end },
+            { p = "yield across a C%-call boundary", title = "Yield inside a protected call", fn = function()
+                return "task.wait()/WaitForChild was called somewhere Roblox cannot pause (like inside a metamethod or table.sort).", {
+                    "Move the waiting code out of that callback.",
+                    "Use task.spawn(function() ... end) to run waiting code separately.",
+                }, "task.spawn(function()\n    task.wait(1)\nend)"
+            end },
+            { p = "[Tt]able index is nil", title = "Table key is nil", fn = function()
+                return "You used nil as a key in a table (t[nil] = ...).", {
+                    "Print the key before the assignment.",
+                    "Check the variable used as key is set.",
+                }, "if key ~= nil then t[key] = value end"
+            end },
+            { p = "lacking capability", title = "Not allowed in this security context", fn = function()
+                return "That API is restricted for the current identity/context.", {
+                    "Use the executor-provided equivalent if one exists.",
+                    "Wrap the call in pcall so the script keeps running.",
+                }, "local ok, err = pcall(function() ... end)\nif not ok then warn(err) end"
+            end },
+            { p = "[Mm]aximum event re%-entrancy", title = "Event firing itself", fn = function()
+                return "An event handler triggered the same event again and again.", {
+                    "Disconnect or debounce the handler.",
+                    "Do not change the property you are listening to inside its own Changed event.",
+                }, "local busy = false\nevent:Connect(function()\n    if busy then return end\n    busy = true\n    -- work\n    busy = false\nend)"
+            end },
+        }
+
+        local function explain(e)
+            local msg = e.msg
+            local where
+            local a, ln = msg:match("([%w_%.%-%[%]]+):(%d+):")
+            if a then where = ("%s - line %s"):format(a, ln)
+            else
+                local l2 = msg:match("%[string \".-\"%]:(%d+):")
+                if l2 then where = "your executed script - line " .. l2 end
+            end
+            if not where and e.trace then
+                local tl = e.trace:match("Script '([^']+)', Line (%d+)")
+                if tl then where = tl end
+            end
+            local title, cause, steps, example
+            for _, r in ipairs(RULES) do
+                local c = { msg:match(r.p) }
+                if #c == 0 then c = { msg:lower():match(r.p) } end
+                if #c > 0 then
+                    local ok, cs, st, ex = pcall(r.fn, c)
+                    if ok then title, cause, steps, example = r.title, cs, st, ex; break end
+                end
+            end
+            local acc = hex(resolve("Accent"))
+            local out = {}
+            if not title then
+                if e.kind <= 2 then
+                    title = "Normal output - nothing to fix"
+                    cause = "This is a regular print/info line, not an error."
+                    steps = { "If you expected an error, use the ERR filter or the ERRORS view.", "Use the search box to find a specific line." }
+                else
+                    title = (e.kind == 3) and "Warning" or "Unrecognised error"
+                    cause = "I don't have a specific rule for this message, so here is a general approach."
+                    steps = {
+                        "Read the message from the start: the 'path:line:' prefix tells you where it happened.",
+                        "Open that script at that line and print() every variable used on it.",
+                        "Search the exact message text (without numbers/names) online for known causes.",
+                        "Wrap the risky part in pcall to see the error without stopping the script.",
+                    }
+                    example = "local ok, err = pcall(function()\n    -- the failing code\nend)\nif not ok then warn(err) end"
+                end
+            end
+            out[#out + 1] = ('<font color="%s"><b>%s</b></font>'):format(acc, rt(title))
+            if where then out[#out + 1] = '<b>Where</b>  ' .. rt(where) end
+            out[#out + 1] = '<b>What happened</b>\n' .. rt(cause)
+            local sl = {}
+            for i, s in ipairs(steps) do sl[#sl + 1] = ("%d. %s"):format(i, rt(s)) end
+            out[#out + 1] = '<b>How to fix</b>\n' .. table.concat(sl, "\n")
+            if example then out[#out + 1] = '<b>Example</b>\n<font color="#9fd3ff">' .. rt(example) .. '</font>' end
+            local raw = e.msg
+            if e.trace and e.trace ~= "" then raw = raw .. "\n" .. e.trace end
+            if #raw > 700 then raw = raw:sub(1, 700) .. " ..." end
+            out[#out + 1] = '<font color="#7d7d8a"><b>Original</b>\n' .. rt(raw) .. '</font>'
+            local rich = table.concat(out, "\n\n")
+            return rich, plainOf(rich)
+        end
+
+        ---------------------------------------------------------------- data + rows
+        local entries, pending, rows = {}, {}, {}
+        local paused, uniqueMode, selected, selRow, lastError, unread = false, false, nil, nil, nil, 0
+        local fixPlain = ""
+        local order = 0
+
+        local function passes(e)
+            if filter == "LOG" and e.kind > 2 then return false end
+            if filter == "WARN" and e.kind ~= 3 then return false end
+            if filter == "ERR" and e.kind ~= 4 then return false end
+            local q = search.Text
+            if q ~= "" and not e.msg:lower():find(q:lower(), 1, true) then return false end
+            return true
+        end
+
+        local function rowText(e)
+            local m = e.msg
+            if #m > 360 then m = m:sub(1, 360) .. " ..." end
+            local s = ('<font color="#7d7d8a">%s</font> <font color="%s"><b>%s</b></font> %s'):format(e.time, TAGC[e.kind], TAGN[e.kind], rt(m))
+            if e.count and e.count > 1 then s = s .. ('  <font color="#ffd166"><b>x%d</b></font>'):format(e.count) end
+            return s
+        end
+
+        local function showDetail(e)
+            selected = e
+            local rich, plain = explain(e)
+            fixPlain = plain
+            dText.Text = rich
+            dBody.CanvasPosition = Vector2.new(0, 0)
+            detailOpen = true
+            relayout()
+        end
+
+        local function addRow(e)
+            order = order + 1
+            local b = create("TextButton", {
+                Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1,
+                BorderSizePixel = 0, AutoButtonColor = false, Text = "", LayoutOrder = order, Parent = list,
+            })
+            bind(b, "BackgroundColor3", "Accent")
+            corner(b, 3)
+            create("UIPadding", { PaddingTop = UDim.new(0, 2), PaddingBottom = UDim.new(0, 2), PaddingLeft = UDim.new(0, 4), PaddingRight = UDim.new(0, 4), Parent = b })
+            local l = create("TextLabel", {
+                BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, RichText = true,
+                TextWrapped = true, TextSize = 11, Font = Enum.Font.Code, TextXAlignment = Enum.TextXAlignment.Left,
+                TextYAlignment = Enum.TextYAlignment.Top, Text = rowText(e), Parent = b,
+            })
+            bind(l, "TextColor3", "Text")
+            b.MouseButton1Click:Connect(function()
+                if selRow and selRow.Parent then selRow.BackgroundTransparency = 1 end
+                selRow = b; b.BackgroundTransparency = 0.85
+                selected = e
+                if e.kind >= 3 or detailOpen then showDetail(e) end
+            end)
+            rows[#rows + 1] = b
+            if #rows > 150 then
+                local old = table.remove(rows, 1)
+                if old == selRow then selRow = nil end
+                old:Destroy()
+            end
+        end
+
+        local function toBottom() task.defer(function() list.CanvasPosition = Vector2.new(0, 1e7) end) end
+
+        local function rebuild()
+            for _, r in ipairs(rows) do r:Destroy() end
+            rows, selRow = {}, nil
+            pending = {}
+            local show = {}
+            if uniqueMode then
+                local groups, ord = {}, {}
+                for _, e in ipairs(entries) do
+                    if e.kind == 4 and passes(e) then
+                        local key = e.msg:gsub("%d+", "#")
+                        local g = groups[key]
+                        if not g then
+                            g = { kind = 4, msg = e.msg, trace = e.trace, time = e.time, count = 0 }
+                            groups[key] = g; ord[#ord + 1] = g
+                        end
+                        g.count = g.count + 1; g.time = e.time
+                        if e.trace and not g.trace then g.trace = e.trace end
+                    end
+                end
+                for i = math.max(1, #ord - 149), #ord do show[#show + 1] = ord[i] end
+            else
+                for i = #entries, 1, -1 do
+                    if passes(entries[i]) then
+                        show[#show + 1] = entries[i]
+                        if #show >= 150 then break end
+                    end
+                end
+                for i = 1, math.floor(#show / 2) do show[i], show[#show - i + 1] = show[#show - i + 1], show[i] end
+            end
+            for _, e in ipairs(show) do addRow(e) end
+            emptyLbl.Visible = #show == 0
+            emptyLbl.Text = (#entries == 0) and "Console is empty - waiting for output..." or "Nothing matches this filter."
+            toBottom()
+        end
+
+        local function updateStats()
+            local c = { 0, 0, 0, 0 }
+            for _, e in ipairs(entries) do c[e.kind] = c[e.kind] + 1 end
+            chips.ALL.l.Text = "ALL " .. #entries
+            chips.LOG.l.Text = "LOG " .. (c[1] + c[2])
+            chips.WARN.l.Text = "WARN " .. c[3]
+            chips.ERR.l.Text = "ERR " .. c[4]
+            lErr.Text = c[4] > 0 and ("ERRORS (" .. c[4] .. ")") or "ERRORS"
+            for _, f in ipairs(FILTERS) do lit(chips[f].b, chips[f].l, filter == f) end
+            statsDirty = false
+        end
+
+        -- tab badge: unread error count
+        local badge = create("TextLabel", {
+            AnchorPoint = Vector2.new(1, .5), Position = UDim2.new(1, -10, .5, 0), Size = UDim2.fromOffset(22, 16),
+            BackgroundColor3 = Color3.fromRGB(255, 70, 90), BorderSizePixel = 0, Text = "0", TextSize = 10,
+            Font = Enum.Font.GothamBold, TextColor3 = WHITE, Visible = false, ZIndex = 5, Parent = tab.Button,
+        })
+        corner(badge, 8)
+        local function updateBadge()
+            badge.Visible = unread > 0
+            badge.Text = unread > 99 and "99+" or tostring(unread)
+        end
+
+        local function push(msg, mtype, ts)
+            if paused then return end
+            local e = { kind = KIND[mtype] or 1, msg = tostring(msg), time = os.date("%H:%M:%S", ts or os.time()) }
+            entries[#entries + 1] = e
+            if #entries > MAXN then table.remove(entries, 1) end
+            pending[#pending + 1] = e
+            if #pending > 60 then needRebuild = true; pending = {} end
+            statsDirty = true
+            if e.kind == 4 then
+                lastError = e
+                if Window.ActiveTab ~= tab then unread = unread + 1; updateBadge() end
+                if uniqueMode then needRebuild = true end
+            end
+        end
+
+        pcall(function()
+            local hist = LogService:GetLogHistory()
+            for i = math.max(1, #hist - 200), #hist do push(hist[i].message, hist[i].messageType, hist[i].timestamp) end
+        end)
+        pcall(function() connect(LogService.MessageOut, function(m, t) push(m, t) end) end)
+        pcall(function()
+            connect(ScriptContext.Error, function(m, trace)
+                for i = #entries, math.max(1, #entries - 6), -1 do
+                    local e = entries[i]
+                    if e.kind == 4 and not e.trace and e.msg:find(tostring(m):sub(1, 50), 1, true) then
+                        e.trace = tostring(trace); return
+                    end
+                end
+            end)
+        end)
+
+        -- flush loop (only while the Console tab is on screen)
+        local function active() return Window.Visible and not Window.Minimized and Window.ActiveTab == tab end
+        animate(root, function()
+            if unread > 0 then unread = 0; updateBadge() end
+            if needRebuild then
+                needRebuild = false; statsDirty = true; rebuild()
+            elseif #pending > 0 then
+                local atBottom = list.CanvasPosition.Y + list.AbsoluteWindowSize.Y >= list.AbsoluteCanvasSize.Y - 30
+                local n = math.min(#pending, 25)
+                for i = 1, n do
+                    local e = pending[i]
+                    if not uniqueMode and passes(e) then addRow(e); emptyLbl.Visible = false end
+                end
+                for _ = 1, n do table.remove(pending, 1) end
+                if atBottom then toBottom() end
+            end
+            if statsDirty then updateStats() end
+        end, active)
+
+        ---------------------------------------------------------------- buttons
+        local function doClear()
+            entries, pending, lastError, selected = {}, {}, nil, nil
+            detailOpen = false; relayout()
+            needRebuild = true; statsDirty = true
+        end
+        bClear.MouseButton1Click:Connect(function() Yqantg:_sfx("Click"); doClear() end)
+        bCopy.MouseButton1Click:Connect(function()
+            Yqantg:_sfx("Click")
+            local lines = {}
+            for i = math.max(1, #entries - 300), #entries do
+                local e = entries[i]
+                if passes(e) then lines[#lines + 1] = ("[%s] [%s] %s"):format(e.time, TAGN[e.kind], e.msg) end
+            end
+            if #lines == 0 then Yqantg:Notify({ Title = "Console", Content = "Nothing to copy.", Type = "Info" }); return end
+            if Compat.copy(table.concat(lines, "\n")) then
+                Yqantg:Notify({ Title = "Console copied", Content = #lines .. " lines", Type = "Success" })
+            else
+                Yqantg:Notify({ Title = "Clipboard unavailable", Content = "This executor can't copy text.", Type = "Warning" })
+            end
+        end)
+        bPause.MouseButton1Click:Connect(function()
+            Yqantg:_sfx("Click")
+            paused = not paused
+            lPause.Text = paused and "RESUME" or "PAUSE"
+            lit(bPause, lPause, paused)
+        end)
+        bErr.MouseButton1Click:Connect(function()
+            Yqantg:_sfx("Click")
+            uniqueMode = not uniqueMode
+            lit(bErr, lErr, uniqueMode)
+            if uniqueMode then filter = "ALL" end
+            needRebuild = true; statsDirty = true
+        end)
+        bFix.MouseButton1Click:Connect(function()
+            Yqantg:_sfx("Click")
+            local target = selected or lastError
+            if not target then
+                fixPlain = "No errors captured - the console is clean."
+                dText.Text = '<font color="' .. hex(resolve("Accent")) .. '"><b>All clear</b></font>\n\nNo errors have been captured yet. When something fails, tap the red line (or press SMART FIX) and I will explain the cause and how to fix it.'
+                detailOpen = true; relayout()
+                return
+            end
+            showDetail(target)
+        end)
+        dClose.MouseButton1Click:Connect(function() Yqantg:_sfx("Click"); detailOpen = false; relayout() end)
+        dCopy.MouseButton1Click:Connect(function()
+            Yqantg:_sfx("Click")
+            if fixPlain ~= "" and Compat.copy(fixPlain) then
+                Yqantg:Notify({ Title = "Fix copied", Content = "Guide copied to clipboard.", Type = "Success" })
+            end
+        end)
+
+        Window.Console = {
+            Clear = doClear,
+            Push = function(msg, kind) push(msg, ({ Enum.MessageType.MessageOutput, Enum.MessageType.MessageInfo, Enum.MessageType.MessageWarning, Enum.MessageType.MessageError })[kind or 1]) end,
+        }
+        updateStats()
     end
 
     -- entrance: same 3D choreography as re-opening the window
