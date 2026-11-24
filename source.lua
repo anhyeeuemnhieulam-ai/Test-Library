@@ -317,9 +317,9 @@ local Yqantg = {
     ImageFolder  = "YqantgUI/img",
     SoundIds     = { Click = "rbxassetid://6895079853" },  -- swap for your own ids
     IntroSounds  = {                                       -- Black Flash intro (swap for your own ids; set a key to false to mute it)
-        Crack   = "rbxasset://sounds/snap.mp3",                 -- lightning cracking (strikes + ambient)
+        Crack   = "rbxasset://sounds/swordslash.wav",           -- lightning cracking (strikes + ambient)
         Impact  = "rbxasset://sounds/impact_explosion_03.mp3",  -- the big boom when the title slams in / final strike
-        Shard   = "rbxasset://sounds/snap.mp3",                 -- tiny pitched-up ticks = glass shards raining down
+        Shard   = "rbxasset://sounds/electronicpingshort.wav",  -- tiny pitched-up pings = glass shards raining down
         Slash   = "rbxasset://sounds/swordslash.wav",           -- the diagonal slash that splits the screen
     },
     Flags        = {},
@@ -1443,7 +1443,32 @@ local function playIntro(self)
     local alive, skip = true, false
 
     -- ===== intro sound (shatter / crack / boom / slash) ==========================================
-    local IS = self.IntroSounds or {}
+    local IS = {}
+    for k, v in pairs(self.IntroSounds or {}) do IS[k] = v end
+    -- every id is test-loaded once in the background; a dead id falls back to the Click sound (or goes silent)
+    -- so a bad sound can never spam errors or break the intro
+    local probed = {}
+    local function probe(id)
+        if probed[id] ~= nil then return probed[id] end
+        local ok, good = pcall(function()
+            local sd = create("Sound", { SoundId = id, Volume = 0, Parent = g })
+            local t1 = os.clock()
+            while alive and not sd.IsLoaded and os.clock() - t1 < 1.5 do task.wait(0.05) end
+            local r = sd.IsLoaded and sd.TimeLength > 0
+            sd:Destroy()
+            return r
+        end)
+        probed[id] = (ok and good) and true or false
+        return probed[id]
+    end
+    task.spawn(function()
+        for key, id in pairs(IS) do
+            if id and not probe(id) then
+                local fb = self.SoundIds and self.SoundIds.Click
+                IS[key] = (fb and probe(fb)) and fb or false
+            end
+        end
+    end)
     local function sfx(key, vol, speed, life)
         if not self.SoundEnabled then return end
         local id = IS[key]
@@ -1453,6 +1478,7 @@ local function playIntro(self)
         task.delay(life or 3, function() s:Destroy() end)
     end
     local function shatter(n, spread, vol)      -- a burst of glass shards: lots of tiny ticks at random high pitches
+        n = math.min(n, 8)                      -- a few well-spaced sounds beat dozens of overlapping ones
         for i = 1, n do
             task.delay(math.random() * (spread or 0.4), function()
                 if alive then sfx("Shard", (vol or 0.5) * (0.5 + math.random() * 0.5), 1.5 + math.random() * 1.6, 1.2) end
