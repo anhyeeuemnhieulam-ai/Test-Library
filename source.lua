@@ -316,6 +316,12 @@ local Yqantg = {
     Icons        = {},       -- Icons.Notify / Icons.Orb = id | url | {list} | false (off) ; nil = random anime
     ImageFolder  = "YqantgUI/img",
     SoundIds     = { Click = "rbxassetid://6895079853" },  -- swap for your own ids
+    IntroSounds  = {                                       -- Black Flash intro (swap for your own ids; set a key to false to mute it)
+        Crack   = "rbxasset://sounds/snap.mp3",                 -- lightning cracking (strikes + ambient)
+        Impact  = "rbxasset://sounds/impact_explosion_03.mp3",  -- the big boom when the title slams in / final strike
+        Shard   = "rbxasset://sounds/snap.mp3",                 -- tiny pitched-up ticks = glass shards raining down
+        Slash   = "rbxasset://sounds/swordslash.wav",           -- the diagonal slash that splits the screen
+    },
     Flags        = {},
     Options      = {},
     Windows      = {},
@@ -1422,7 +1428,7 @@ local function playIntro(self)
     -- white/red impact flash, shockwaves, sparks and screen shake -> loading -> final strike
     -- and a diagonal slash splits the screen open.   (tap / click after 1 s = skip)
     local TITLE = "YQANTG"
-    local SUBTITLE = "BLACK FLASH  ·  NEON ANIME  ·  V" .. tostring(self.Version)
+    local SUBTITLE = "Yqantg Library V" .. tostring(self.Version)
     local STEPS = { "igniting black flash", "condensing cursed energy", "building interface", "syncing assets", "ready" }
     local LOAD = 2.1                                  -- seconds of the loading phase
     local CY = -64                                    -- emblem centre (offset from middle of stage)
@@ -1435,6 +1441,24 @@ local function playIntro(self)
 
     local root, conn, skipConn
     local alive, skip = true, false
+
+    -- ===== intro sound (shatter / crack / boom / slash) ==========================================
+    local IS = self.IntroSounds or {}
+    local function sfx(key, vol, speed, life)
+        if not self.SoundEnabled then return end
+        local id = IS[key]
+        if not id then return end
+        local s = create("Sound", { SoundId = id, Volume = (vol or 1) * (self.SoundVolume or 1), PlaybackSpeed = speed or 1, Parent = g })
+        pcall(function() s:Play() end)
+        task.delay(life or 3, function() s:Destroy() end)
+    end
+    local function shatter(n, spread, vol)      -- a burst of glass shards: lots of tiny ticks at random high pitches
+        for i = 1, n do
+            task.delay(math.random() * (spread or 0.4), function()
+                if alive then sfx("Shard", (vol or 0.5) * (0.5 + math.random() * 0.5), 1.5 + math.random() * 1.6, 1.2) end
+            end)
+        end
+    end
     local function W(t)                                -- wait that ends early when skipped
         local e = os.clock() + t
         while alive and not skip and os.clock() < e do task.wait() end
@@ -1796,6 +1820,8 @@ local function playIntro(self)
         local function strike(n)
             if skip then return end
             flash(RED, n == 1 and 0.6 or 0.42, 0.34)
+            sfx("Crack", n == 1 and 0.7 or 1, n == 1 and 1.2 or 0.9)
+            shatter(n == 1 and 4 or 8, 0.25, 0.35)
             shake(n == 1 and 6 or 11)
             bolts(n == 1 and 4 or 6, false, 0, CY, n == 1 and 170 or 230)
             sparkBurst(n == 1 and 10 or 18, 260, 0, CY)
@@ -1811,6 +1837,9 @@ local function playIntro(self)
             vigTarget = 0.34
             flash(WHITE, 0.04, 0.12)
             task.delay(0.12, function() flash(RED, 0.3, 0.6) end)
+            sfx("Impact", 1.4, 0.85, 4)
+            sfx("Crack", 1, 0.7)
+            shatter(26, 0.55, 0.6)
             shake(26)
             bolts(13, true, 0, CY, math.max(SW, SH) * 0.5)
             sparkBurst(54, 520, 0, CY)
@@ -1851,6 +1880,8 @@ local function playIntro(self)
                 W(0.45 + math.random() * 0.55)
                 if alive and not exiting and not skip and impacted then
                     bolts(2, false, 0, CY, 150)
+                    sfx("Crack", 0.35, 1.3 + math.random() * 0.5)
+                    shatter(2, 0.15, 0.25)
                     shake(3)
                     sparkBurst(5, 160, 0, CY)
                 end
@@ -1889,6 +1920,9 @@ local function playIntro(self)
         pulse:Cancel()
         flash(RED, 0.15, 0.4)
         task.delay(0.05, function() flash(WHITE, 0.2, 0.25) end)
+        sfx("Impact", 1.5, 0.75, 4)
+        sfx("Crack", 1, 0.8)
+        shatter(32, 0.7, 0.65)
         shake(22)
         bolts(14, true, 0, CY, math.max(SW, SH) * 0.55)
         sparkBurst(60, 600, 0, CY)
@@ -1902,6 +1936,8 @@ local function playIntro(self)
             BackgroundColor3 = WHITE, BorderSizePixel = 0, ZIndex = 203, Parent = curtain,
         })
         local seamGlow = create("UIStroke", { Thickness = 5, Color = RED, Transparency = 0.2, Parent = seam })
+        sfx("Slash", 1.2, 0.9)
+        shatter(14, 0.5, 0.5)
         tween(seam, 0.22, { Size = UDim2.new(1, 0, 0, 5) }, Enum.EasingStyle.Quint)
         tween(content, 0.42, { GroupTransparency = 1 }, Enum.EasingStyle.Quad)
         task.wait(0.3)
