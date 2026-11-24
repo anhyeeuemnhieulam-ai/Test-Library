@@ -2405,7 +2405,7 @@ local function newRow(section, height)
     -- HUD speed-lines on the right edge
     for n = 0, 1 do
         local sl = create("Frame", {
-            AnchorPoint = Vector2.new(.5, .5), Position = UDim2.new(1, -10 - n * 8, .5, 0), Size = UDim2.new(0, 2 - n, 2, 0),
+            AnchorPoint = Vector2.new(.5, .5), Position = UDim2.new(1, -10 - n * 8, .5, 0), Size = UDim2.fromOffset(2 - n, 56),
             Rotation = 20, BackgroundTransparency = 0.9 + n * 0.04, BorderSizePixel = 0, Parent = row,
         })
         bind(sl, "BackgroundColor3", "Accent")
@@ -2989,9 +2989,10 @@ function Section:AddDropdown(o)
     local root = newRow(self, 34)
     root.AutomaticSize = Enum.AutomaticSize.Y
     root.ClipsDescendants = true
-    create("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Parent = root })
+    local inner = create("Frame", { Name = "Inner", Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, BorderSizePixel = 0, Parent = root })
+    create("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Parent = inner })
 
-    local head = create("TextButton", { Size = UDim2.new(1, 0, 0, 34), BackgroundTransparency = 1, Text = "", LayoutOrder = 1, Parent = root })
+    local head = create("TextButton", { Size = UDim2.new(1, 0, 0, 34), BackgroundTransparency = 1, Text = "", LayoutOrder = 1, Parent = inner })
     local l = text(head, o.Name or "Dropdown", 13)
     l.Position = UDim2.fromOffset(10, 0); l.Size = UDim2.new(0.45, -10, 1, 0)
     local cur = text(head, "", 12, "Accent", Enum.Font.GothamBold)
@@ -2999,7 +3000,7 @@ function Section:AddDropdown(o)
     cur.TextXAlignment = Enum.TextXAlignment.Right
     local arrow = drawIcon(head, "down", { size = 12, color = "SubText", pos = UDim2.new(1, -16, .5, 0), thick = 2 })
 
-    local wrap = create("Frame", { Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, Visible = false, LayoutOrder = 2, Parent = root })
+    local wrap = create("Frame", { Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, Visible = false, LayoutOrder = 2, Parent = inner })
     create("UIListLayout", { Padding = UDim.new(0, 4), Parent = wrap })
     create("UIPadding", { PaddingLeft = UDim.new(0, 6), PaddingRight = UDim.new(0, 6), PaddingBottom = UDim.new(0, 6), Parent = wrap })
 
@@ -3259,8 +3260,9 @@ function Section:AddColorPicker(o)
 
     local root = newRow(self, 34)
     root.AutomaticSize = Enum.AutomaticSize.Y
-    create("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Parent = root })
-    local head = create("TextButton", { Size = UDim2.new(1, 0, 0, 34), BackgroundTransparency = 1, Text = "", LayoutOrder = 1, Parent = root })
+    local inner = create("Frame", { Name = "Inner", Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, BorderSizePixel = 0, Parent = root })
+    create("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Parent = inner })
+    local head = create("TextButton", { Size = UDim2.new(1, 0, 0, 34), BackgroundTransparency = 1, Text = "", LayoutOrder = 1, Parent = inner })
     local l = text(head, o.Name or "Color", 13)
     l.Position = UDim2.fromOffset(10, 0); l.Size = UDim2.new(1, -176, 1, 0)
     local hex = text(head, "", 11, "SubText", Enum.Font.Code)
@@ -3272,7 +3274,7 @@ function Section:AddColorPicker(o)
     local swScale = create("UIScale", { Parent = sw })
 
     local H = 134
-    local wrap = create("Frame", { Size = UDim2.new(1, 0, 0, 0), BackgroundTransparency = 1, ClipsDescendants = true, Visible = false, LayoutOrder = 2, Parent = root })
+    local wrap = create("Frame", { Size = UDim2.new(1, 0, 0, 0), BackgroundTransparency = 1, ClipsDescendants = true, Visible = false, LayoutOrder = 2, Parent = inner })
 
     local svBox = create("Frame", { Position = UDim2.fromOffset(10, 6), Size = UDim2.new(1, -20, 0, 78), BackgroundColor3 = Color3.fromHSV(h, 1, 1), BorderSizePixel = 0, Parent = wrap })
     corner(svBox, 6)
