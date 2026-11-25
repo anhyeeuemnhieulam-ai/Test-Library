@@ -317,9 +317,9 @@ local Yqantg = {
     ImageFolder  = "YqantgUI/img",
     SoundIds     = { Click = "rbxassetid://6895079853" },  -- swap for your own ids
     IntroSounds  = {                                       -- Black Flash intro (swap for your own ids; set a key to false to mute it)
-        Crack   = "rbxasset://sounds/snap.mp3",                 -- lightning cracking (strikes + ambient)
+        Crack   = "rbxasset://sounds/swordslash.wav",           -- lightning cracking (strikes + ambient)
         Impact  = "rbxasset://sounds/impact_explosion_03.mp3",  -- the big boom when the title slams in / final strike
-        Shard   = "rbxasset://sounds/snap.mp3",                 -- tiny pitched-up ticks = glass shards raining down
+        Shard   = "rbxasset://sounds/electronicpingshort.wav",  -- tiny pitched-up pings = glass shards raining down
         Slash   = "rbxasset://sounds/swordslash.wav",           -- the diagonal slash that splits the screen
     },
     Flags        = {},
@@ -1443,7 +1443,31 @@ local function playIntro(self)
     local alive, skip = true, false
 
     -- ===== intro sound (shatter / crack / boom / slash) ==========================================
-    local IS = self.IntroSounds or {}
+    local IS = {}
+    for k, v in pairs(self.IntroSounds or {}) do IS[k] = v end
+    -- every id is test-loaded once in the background; a dead id falls back to the Click sound (or goes silent)
+    local probed = {}
+    local function probe(id)
+        if probed[id] ~= nil then return probed[id] end
+        local ok, good = pcall(function()
+            local sd = create("Sound", { SoundId = id, Volume = 0, Parent = g })
+            local t1 = os.clock()
+            while alive and not sd.IsLoaded and os.clock() - t1 < 1.5 do task.wait(0.05) end
+            local r = sd.IsLoaded and sd.TimeLength > 0
+            sd:Destroy()
+            return r
+        end)
+        probed[id] = (ok and good) and true or false
+        return probed[id]
+    end
+    task.spawn(function()
+        for key, id in pairs(IS) do
+            if id and not probe(id) then
+                local fb = self.SoundIds and self.SoundIds.Click
+                IS[key] = (fb and probe(fb)) and fb or false
+            end
+        end
+    end)
     local function sfx(key, vol, speed, life)
         if not self.SoundEnabled then return end
         local id = IS[key]
@@ -1453,6 +1477,7 @@ local function playIntro(self)
         task.delay(life or 3, function() s:Destroy() end)
     end
     local function shatter(n, spread, vol)      -- a burst of glass shards: lots of tiny ticks at random high pitches
+        n = math.min(n, 8)
         for i = 1, n do
             task.delay(math.random() * (spread or 0.4), function()
                 if alive then sfx("Shard", (vol or 0.5) * (0.5 + math.random() * 0.5), 1.5 + math.random() * 1.6, 1.2) end
@@ -1498,7 +1523,7 @@ local function playIntro(self)
             AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromScale(1 / k, 1 / k),
             BackgroundTransparency = 1, Parent = content,
         })
-        local stageS = create("UIScale", { Scale = k, Parent = stage })
+        create("UIScale", { Scale = k, Parent = stage })
 
         local function px(x, y) return UDim2.new(.5, x, .5, y) end
         local function layer(z)
@@ -1540,9 +1565,6 @@ local function playIntro(self)
         end
         local shakeAmp = 0
         local function shake(a) shakeAmp = math.max(shakeAmp, a) end
-        local BAR = math.floor(SH * 0.07)                 -- cinematic letterbox bar height
-        local punch = 0                                   -- camera zoom punch (decays)
-        local function kick(a) punch = math.max(punch, a) end
 
         local function seg(x0, y0, x1, y1, thick, col, tr, z)
             local dx, dy = x1 - x0, y1 - y0
@@ -1656,25 +1678,10 @@ local function playIntro(self)
             local sx, sy = ax == 0 and 1 or -1, ay == 0 and 1 or -1
             for _, sz in ipairs({ UDim2.fromOffset(26, 2), UDim2.fromOffset(2, 26) }) do
                 brackets[#brackets + 1] = create("Frame", {
-                    AnchorPoint = Vector2.new(ax, ay), Position = UDim2.new(ax, sx * 18, ay, sy * (18 + BAR)), Size = sz,
+                    AnchorPoint = Vector2.new(ax, ay), Position = UDim2.new(ax, sx * 18, ay, sy * 18), Size = sz,
                     BackgroundColor3 = RED, BackgroundTransparency = 1, BorderSizePixel = 0, ZIndex = 5, Parent = stage,
                 })
             end
-        end
-
-        ------------------------------------------------------------ letterbox bars (slide in = cinematic)
-        local bars = {}
-        for i = 1, 2 do
-            local top = i == 1
-            local b = create("Frame", {
-                AnchorPoint = Vector2.new(0, top and 0 or 1), Position = UDim2.fromScale(0, top and 0 or 1), Size = UDim2.new(1, 0, 0, 0),
-                BackgroundColor3 = BLK, BorderSizePixel = 0, ZIndex = 14, Parent = stage,
-            })
-            create("Frame", {
-                AnchorPoint = Vector2.new(0, top and 1 or 0), Position = UDim2.fromScale(0, top and 1 or 0), Size = UDim2.new(1, 0, 0, 1),
-                BackgroundColor3 = RED, BackgroundTransparency = 0.35, BorderSizePixel = 0, ZIndex = 15, Parent = b,
-            })
-            bars[i] = b
         end
 
         ------------------------------------------------------------ ember dot (the spark before the first strike)
@@ -1742,14 +1749,12 @@ local function playIntro(self)
         create("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 5), HorizontalAlignment = Enum.HorizontalAlignment.Center, Parent = tHolder })
         local letters = {}
         local li = 0
-        local titleW = -5
         for _, cp in utf8.codes(TITLE) do
             li = li + 1
             local ch = utf8.char(cp)
             local w = 22
             pcall(function() w = math.ceil(TextService:GetTextSize(ch, 32, Enum.Font.GothamBlack, Vector2.new(1000, 100)).X) + 2 end)
             local slot = create("Frame", { LayoutOrder = li, Size = UDim2.fromOffset(w, 40), BackgroundTransparency = 1, Parent = tHolder })
-            titleW = titleW + w + 5
             local sc = create("UIScale", { Scale = 3, Parent = slot })
             local gh = create("TextLabel", { Position = UDim2.fromOffset(2, 2), Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Text = ch, TextSize = 32, Font = Enum.Font.GothamBlack, TextColor3 = RED, TextTransparency = 1, ZIndex = 12, Parent = slot })
             local lb = create("TextLabel", { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Text = ch, TextSize = 32, Font = Enum.Font.GothamBlack, TextColor3 = WHITE, TextTransparency = 1, ZIndex = 13, Parent = slot })
@@ -1773,150 +1778,9 @@ local function playIntro(self)
             TextSize = 11, Font = Enum.Font.GothamBold, TextColor3 = Color3.fromRGB(255, 96, 112), TextTransparency = 1, ZIndex = 12, Parent = stage,
         })
         local skipL = create("TextLabel", {
-            AnchorPoint = Vector2.new(.5, 1), Position = UDim2.new(.5, 0, 1, -(16 + BAR)), Size = UDim2.fromOffset(200, 12), BackgroundTransparency = 1,
+            AnchorPoint = Vector2.new(.5, 1), Position = UDim2.new(.5, 0, 1, -16), Size = UDim2.fromOffset(200, 12), BackgroundTransparency = 1,
             Text = "TAP TO SKIP", TextSize = 9, Font = Enum.Font.GothamBold, TextColor3 = WHITE, TextTransparency = 1, ZIndex = 12, Parent = stage,
         })
-
-        ------------------------------------------------------------ UPGRADE: halo, outer rings, HUD, shine, glass cracks, flying shards, light streaks
-        local TOUCH = UserInputService.TouchEnabled
-        local halo = {}
-        for i = 1, 5 do
-            local sz = 150 + i * 120
-            local h = create("Frame", { AnchorPoint = Vector2.new(.5, .5), Position = px(0, CY), Size = UDim2.fromOffset(sz, sz), BackgroundColor3 = RED, BackgroundTransparency = 1, BorderSizePixel = 0, ZIndex = 1, Parent = stage })
-            corner(h, 500)
-            halo[i] = h
-        end
-        local haloA, haloTarget = 0, 0
-
-        local ring2 = create("Frame", { AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromOffset(196, 196), BackgroundTransparency = 1, ZIndex = 2, Parent = core })
-        for i = 0, 15 do
-            local a = (i / 16) * math.pi * 2
-            local big = i % 4 == 0
-            create("Frame", {
-                AnchorPoint = Vector2.new(.5, .5), Size = UDim2.fromOffset(big and 22 or 9, 2), Position = UDim2.new(.5, math.cos(a) * 97, .5, math.sin(a) * 97),
-                Rotation = math.deg(a) + 90, BackgroundColor3 = big and WHITE or RED, BackgroundTransparency = big and 0.2 or 0.5, BorderSizePixel = 0, ZIndex = 2, Parent = ring2,
-            })
-        end
-        local orb = create("Frame", { AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromOffset(220, 220), BackgroundTransparency = 1, ZIndex = 3, Parent = core })
-        for i = 0, 2 do
-            local a = (i / 3) * math.pi * 2
-            create("Frame", {
-                AnchorPoint = Vector2.new(.5, .5), Position = UDim2.new(.5, math.cos(a) * 110, .5, math.sin(a) * 110), Size = UDim2.fromOffset(5, 5),
-                Rotation = 45, BackgroundColor3 = i == 0 and WHITE or RED, BorderSizePixel = 0, ZIndex = 3, Parent = orb,
-            })
-        end
-
-        -- HUD readouts in the corners
-        local function hud(ax, ay, x, y, txt, align)
-            return create("TextLabel", {
-                AnchorPoint = Vector2.new(ax, ay), Position = UDim2.new(ax, x, ay, y), Size = UDim2.fromOffset(240, 12), BackgroundTransparency = 1, Text = txt,
-                TextSize = 9, Font = Enum.Font.Code, TextColor3 = Color3.fromRGB(255, 96, 112), TextTransparency = 1, TextXAlignment = align, ZIndex = 12, Parent = stage,
-            })
-        end
-        local hudTL = hud(0, 0, 54, BAR + 14, "YQANTG // LIBRARY CORE", Enum.TextXAlignment.Left)
-        local hudTR = hud(1, 0, -54, BAR + 14, "0x000000", Enum.TextXAlignment.Right)
-        local hudBL = hud(0, 1, 54, -(BAR + 14), "BUILD  V" .. tostring(self.Version), Enum.TextXAlignment.Left)
-        local hudBR = hud(1, 1, -54, -(BAR + 14), "-- FPS", Enum.TextXAlignment.Right)
-        local huds = { hudTL, hudTR, hudBL, hudBR }
-        local hexT = 0
-
-        -- light sweep across the title
-        local shineBox = create("Frame", { AnchorPoint = Vector2.new(.5, 0), Position = px(0, 52), Size = UDim2.fromOffset(titleW + 8, 40), BackgroundTransparency = 1, ClipsDescendants = true, ZIndex = 14, Parent = stage })
-        local shineBar = create("Frame", {
-            AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromOffset(-40, 20), Size = UDim2.fromOffset(24, 90), Rotation = 18,
-            BackgroundColor3 = Color3.fromRGB(255, 130, 145), BackgroundTransparency = 0.3, BorderSizePixel = 0, Visible = false, ZIndex = 14, Parent = shineBox,
-        })
-        create("UIGradient", { Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.5, 0), NumberSequenceKeypoint.new(1, 1) }), Parent = shineBar })
-        local function shine()
-            if not alive then return end
-            shineBar.Position = UDim2.fromOffset(-40, 20); shineBar.Visible = true
-            tween(shineBar, 0.8, { Position = UDim2.fromOffset(titleW + 48, 20) }, Enum.EasingStyle.Quad)
-            task.delay(0.85, function() if shineBar.Parent then shineBar.Visible = false end end)
-        end
-
-        -- anamorphic light streak
-        local function streak(y, long)
-            local w = long and SW * 1.3 or SW * 0.8
-            local function mk(h, col, tr, z)
-                local f = create("Frame", { AnchorPoint = Vector2.new(.5, .5), Position = px(0, y or CY), Size = UDim2.fromOffset(0, h), BackgroundColor3 = col, BackgroundTransparency = tr, BorderSizePixel = 0, ZIndex = z, Parent = stage })
-                create("UIGradient", { Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.5, 0), NumberSequenceKeypoint.new(1, 1) }), Parent = f })
-                return f
-            end
-            local a, b = mk(3, WHITE, 0, 19), mk(14, RED, 0.45, 18)
-            tween(a, 0.12, { Size = UDim2.fromOffset(w, 3) }, Enum.EasingStyle.Quint)
-            tween(b, 0.12, { Size = UDim2.fromOffset(w, 14) }, Enum.EasingStyle.Quint)
-            task.delay(0.12, function()
-                tween(a, 0.5, { Size = UDim2.fromOffset(w, 0), BackgroundTransparency = 1 }, Enum.EasingStyle.Quad)
-                tween(b, 0.5, { Size = UDim2.fromOffset(w, 0), BackgroundTransparency = 1 }, Enum.EasingStyle.Quad)
-            end)
-            task.delay(0.7, function() a:Destroy(); b:Destroy() end)
-        end
-
-        -- glass crack web: rays from the impact + rings joining them
-        local crackParts = {}
-        local function crackWeb(ox, oy, rays, reach)
-            local steps = TOUCH and 4 or 6
-            local base = math.random() * 6.283
-            local pts, made = {}, {}
-            for r = 1, rays do
-                local ang = base + (r / rays) * 6.283 + (math.random() - 0.5) * 0.35
-                local dx, dy = math.cos(ang), math.sin(ang)
-                local nx, ny = -dy, dx
-                local p = { { ox, oy } }
-                for st = 1, steps do
-                    local d = reach * st / steps * (0.9 + math.random() * 0.2)
-                    local off = (math.random() - 0.5) * 16
-                    p[#p + 1] = { ox + dx * d + nx * off, oy + dy * d + ny * off }
-                end
-                pts[r] = p
-                for st = 1, steps do
-                    local a, b = p[st], p[st + 1]
-                    local th = 2.2 - (st / steps) * 1.2
-                    made[#made + 1] = { seg(a[1], a[2], b[1], b[2], th + 4, RED, 1, 8), 0.78, st }
-                    made[#made + 1] = { seg(a[1], a[2], b[1], b[2], th, WHITE, 1, 9), 0.15, st }
-                end
-            end
-            for _, st in ipairs(TOUCH and { 2, 4 } or { 2, 4, 5 }) do
-                for r = 1, rays do
-                    local a, b = pts[r][st + 1], pts[r % rays + 1][st + 1]
-                    made[#made + 1] = { seg(a[1], a[2], b[1], b[2], 1.2, WHITE, 1, 9), 0.4, st }
-                end
-            end
-            for _, m in ipairs(made) do
-                crackParts[#crackParts + 1] = m[1]
-                task.delay(m[3] * 0.035, function()
-                    if m[1].Parent then tween(m[1], 0.1, { BackgroundTransparency = m[2] }) end
-                end)
-            end
-        end
-        local function crackBreak()
-            for _, f in ipairs(crackParts) do
-                if f.Parent then
-                    tween(f, 0.12, { BackgroundTransparency = 0 })
-                    task.delay(0.14, function() if f.Parent then tween(f, 0.35, { BackgroundTransparency = 1 }) end end)
-                    task.delay(0.55, function() f:Destroy() end)
-                end
-            end
-            crackParts = {}
-        end
-
-        -- flying glass shards (spin, gravity, fade)
-        local shardsL = {}
-        local function shardBurst(n, spd, ox, oy)
-            if TOUCH then n = math.floor(n * 0.6) end
-            local cols = { WHITE, Color3.fromRGB(255, 70, 90), Color3.fromRGB(255, 26, 52), Color3.fromRGB(20, 0, 6), Color3.fromRGB(235, 235, 245) }
-            for _ = 1, n do
-                local a = math.random() * 6.283
-                local v = spd * (0.3 + math.random() * 0.9)
-                local f = create("Frame", {
-                    AnchorPoint = Vector2.new(.5, .5), Position = px(ox or 0, oy or CY), Size = UDim2.fromOffset(math.random(7, 30), math.random(3, 12)),
-                    Rotation = math.random(0, 359), BackgroundColor3 = cols[math.random(#cols)], BackgroundTransparency = 0.12, BorderSizePixel = 0, ZIndex = 24, Parent = stage,
-                })
-                create("UIGradient", { Transparency = NumberSequence.new(0, 0.55), Rotation = math.random(0, 180), Parent = f })
-                local life = 0.9 + math.random() * 0.9
-                shardsL[#shardsL + 1] = { f = f, x = ox or 0, y = oy or CY, vx = math.cos(a) * v, vy = math.sin(a) * v - 120, r = f.Rotation, vr = (math.random() - 0.5) * 900, life = life, max = life }
-            end
-        end
 
         ------------------------------------------------------------ per-frame animation
         local exiting, impacted = false, false
@@ -1924,36 +1788,6 @@ local function playIntro(self)
         conn = RunService.Heartbeat:Connect(function(dt)
             local t = os.clock() - t0
             ticks.Rotation = t * 16
-            ring2.Rotation = -t * 26; orb.Rotation = t * 70
-            -- camera: slow push-in + punch on impacts
-            punch = punch - punch * math.min(1, dt * 7)
-            stageS.Scale = k * (1 + punch + math.min(t * 0.006, 0.035))
-            -- red halo behind the emblem
-            haloA = haloA + (haloTarget - haloA) * math.min(1, dt * 4)
-            local hp = 1 + 0.12 * math.sin(t * 3)
-            for _, h in ipairs(halo) do h.BackgroundTransparency = 1 - math.clamp(haloA * 0.075 * hp, 0, 0.5) end
-            -- HUD data stream
-            hexT = hexT - dt
-            if hexT <= 0 then
-                hexT = 0.09
-                hudTR.Text = string.format("0x%06X // %02d", math.random(0, 0xFFFFFF), math.random(0, 99))
-                hudBR.Text = string.format("%d FPS", math.floor(1 / math.max(dt, 0.001) + 0.5))
-            end
-            -- glass shards
-            for i = #shardsL, 1, -1 do
-                local sh = shardsL[i]
-                sh.life = sh.life - dt
-                if sh.life <= 0 then
-                    sh.f:Destroy(); table.remove(shardsL, i)
-                else
-                    sh.x = sh.x + sh.vx * dt; sh.y = sh.y + sh.vy * dt
-                    local drag = math.max(0, 1 - 1.6 * dt)
-                    sh.vx = sh.vx * drag; sh.vy = sh.vy * drag + 900 * dt
-                    sh.r = sh.r + sh.vr * dt
-                    sh.f.Position = px(sh.x, sh.y); sh.f.Rotation = sh.r
-                    sh.f.BackgroundTransparency = 0.12 + 0.88 * (1 - math.clamp(sh.life / (sh.max * 0.5), 0, 1))
-                end
-            end
             -- screen shake
             if shakeAmp > 0.15 then
                 stage.Position = UDim2.new(.5, (math.random() - .5) * 2 * shakeAmp, .5, (math.random() - .5) * 2 * shakeAmp)
@@ -1998,8 +1832,6 @@ local function playIntro(self)
 
         ------------------------------------------------------------ PHASE 0: the void
         vigTarget = 0.82
-        for _, b in ipairs(bars) do tween(b, 0.8, { Size = UDim2.new(1, 0, 0, BAR) }, Enum.EasingStyle.Quint) end
-        haloTarget = 0.2
         tween(line, 1.0, { Size = UDim2.fromOffset(math.max(SW * 0.8, 420), 1) }, Enum.EasingStyle.Quint)
         for _, b in ipairs(brackets) do tween(b, 0.7, { BackgroundTransparency = 0.45 }, Enum.EasingStyle.Quad) end
         tween(skipL, 0.6, { TextTransparency = 0.65 }, Enum.EasingStyle.Quad)
@@ -2016,9 +1848,6 @@ local function playIntro(self)
             sfx("Crack", n == 1 and 0.7 or 1, n == 1 and 1.2 or 0.9)
             shatter(n == 1 and 4 or 8, 0.25, 0.35)
             shake(n == 1 and 6 or 11)
-            kick(n == 1 and 0.015 or 0.035)
-            haloTarget = n == 1 and 0.5 or 0.8
-            if n == 2 then crackWeb(0, CY, 6, 140) end
             bolts(n == 1 and 4 or 6, false, 0, CY, n == 1 and 170 or 230)
             sparkBurst(n == 1 and 10 or 18, 260, 0, CY)
             vigTarget = n == 1 and 0.62 or 0.5
@@ -2037,11 +1866,6 @@ local function playIntro(self)
             sfx("Crack", 1, 0.7)
             shatter(26, 0.55, 0.6)
             shake(26)
-            kick(0.09)
-            haloTarget = 1
-            streak(CY, true)
-            crackWeb(0, CY, TOUCH and 9 or 12, math.min(SW, SH * 1.4) * 0.5)
-            shardBurst(34, 620, 0, CY)
             bolts(13, true, 0, CY, math.max(SW, SH) * 0.5)
             sparkBurst(54, 520, 0, CY)
             speedLines(16)
@@ -2061,8 +1885,6 @@ local function playIntro(self)
             end
             W(0.5)
             tween(sub, 0.5, { TextTransparency = 0 }, Enum.EasingStyle.Quad)
-            for _, hl in ipairs(huds) do tween(hl, 0.6, { TextTransparency = 0.35 }, Enum.EasingStyle.Quad) end
-            shine()
             tween(barBg, 0.4, { BackgroundTransparency = 0.82 }, Enum.EasingStyle.Quad)
             tween(pct, 0.4, { TextTransparency = 0 }, Enum.EasingStyle.Quad)
             barHead.BackgroundTransparency = 0
@@ -2078,12 +1900,6 @@ local function playIntro(self)
         end
 
         ------------------------------------------------------------ PHASE 3: loading (+ ambient mini strikes)
-        task.spawn(function()
-            while alive and not exiting and not skip do
-                W(1.7)
-                if alive and not exiting and not skip and impacted then shine() end
-            end
-        end)
         task.spawn(function()
             while alive and not exiting and not skip do
                 W(0.45 + math.random() * 0.55)
@@ -2133,11 +1949,6 @@ local function playIntro(self)
         sfx("Crack", 1, 0.8)
         shatter(32, 0.7, 0.65)
         shake(22)
-        kick(0.11)
-        haloTarget = 2
-        crackBreak()
-        shardBurst(80, 900, 0, CY)
-        streak(CY, true); streak(CY - 46)
         bolts(14, true, 0, CY, math.max(SW, SH) * 0.55)
         sparkBurst(60, 600, 0, CY)
         speedLines(12)
@@ -2145,7 +1956,6 @@ local function playIntro(self)
         tween(coreS, 0.4, { Scale = 1.5 }, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
         task.wait(0.2)
 
-        haloTarget = 0
         local seam = create("Frame", {
             AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.new(0, 0, 0, 5),
             BackgroundColor3 = WHITE, BorderSizePixel = 0, ZIndex = 203, Parent = curtain,
