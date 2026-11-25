@@ -4,6 +4,8 @@
     ║  Layered depth · parallax · 3D keycaps · glass    ║
     ╚══════════════════════════════════════════════════╝
 
+    INTRO: DEMON SEAL (sigil + awakening eye + blood title)
+
     NEW in 3.0 (NEON ANIME edition)
       • Outer HUD: everything now lives OUTSIDE the window frame too - corner brackets, title plate,
         status tag, drifting sparks and two anime photo stacks (boy left / girl right, click = shuffle,
@@ -1423,6 +1425,189 @@ local function playIntro(self)
     Compat.mountGui(g)
     local TextService = svc("TextService")
 
+    -- ===== DEMON SEAL ==================================================================
+    -- a sigil is carved line by line, a slit-eye opens in the middle of the pentagram, the title
+    -- rises out of the dark dripping blood, loading, then the seal shatters and a diagonal slash
+    -- splits the screen open.  One idea per moment - nothing fights for attention.
+    -- (tap / click after 1 s = skip)
+    local TITLE = "YQANTG"
+    local SUBTITLE = "SEAL BROKEN  ·  YQANTG LIBRARY  ·  V" .. tostring(self.Version)
+    local STEPS = { "carving the sigil", "binding the soul", "awakening the eye", "breaking the seal", "it is done" }
+    local LOAD = 1.6                                  -- seconds of the loading phase
+    local CY = -62                                    -- sigil centre (offset from middle of stage)
+    local RED, HOT, DEEP, BLK = Color3.fromRGB(226, 20, 38), Color3.fromRGB(255, 96, 60), Color3.fromRGB(104, 0, 14), Color3.fromRGB(3, 0, 3)
+
+    local cam = workspace.CurrentCamera
+    local vp = cam and cam.ViewportSize or Vector2.new(1920, 1080)
+    local px = math.min(x + 14, vp.X - t.frame.AbsoluteSize.X - 8)
+    t.frame.Position = UDim2.fromOffset(px, y + 18)
+end
+
+function Yqantg:Notify(o)
+    o = o or {}
+    self:_ensureGui()
+    self:_sfx("Notify")
+    local st = Status[o.Type or "Info"] or Status.Info
+    local duration = o.Duration or 4
+    self._notifCount = (self._notifCount or 0) + 1
+    local BLACK = Color3.new(0, 0, 0)
+
+    local wrap = create("Frame", {
+        BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 68),
+        LayoutOrder = self._notifCount, Parent = self._notifHolder,
+    })
+    -- 3D: card lives on a "slide" layer with its own soft shadow, swings in with a tilt
+    local slide = create("Frame", {
+        BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), Position = UDim2.fromOffset(330, 0),
+        Rotation = 9, Parent = wrap,
+    })
+    softShadow(slide, { offset = 7, spread = 36, transparency = 0.35 })
+    local card = create("Frame", {
+        Size = UDim2.fromScale(1, 1), BackgroundColor3 = resolve("Side"),
+        BorderSizePixel = 0, ClipsDescendants = true, ZIndex = 2, Parent = slide,
+    })
+    corner(card, 14)
+    sheen(card, 20, 190)
+    local _, _, spin = glowStroke(card, 1.2, 90, 0.2)
+
+    local icon = create("Frame", {
+        AnchorPoint = Vector2.new(.5, .5), Size = UDim2.fromOffset(0, 0), Position = UDim2.fromOffset(28, 34),
+        BackgroundColor3 = st[1], BorderSizePixel = 0, Parent = card,
+    })
+    corner(icon, 18)
+    local iconTxt = statusGlyph(icon, st[2], 18, BLACK, 1, 1, 0.5)
+    -- anime picture inside the icon (status glyph moves to a small badge)
+    local hasPic = false
+    local pic = create("ImageLabel", {
+        BackgroundTransparency = 1, Position = UDim2.fromOffset(2, 2), Size = UDim2.new(1, -4, 1, -4),
+        ImageTransparency = 1, ScaleType = Enum.ScaleType.Crop, ZIndex = 2, Parent = icon,
+    })
+    corner(pic, 18)
+    local badge = create("Frame", {
+        AnchorPoint = Vector2.new(1, 1), Position = UDim2.new(1, 3, 1, 3), Size = UDim2.fromOffset(15, 15),
+        BackgroundColor3 = st[1], BorderSizePixel = 0, Visible = false, ZIndex = 4, Parent = icon,
+    })
+    corner(badge, 8)
+    create("UIStroke", { Thickness = 1.5, Color = resolve("Side"), Parent = badge })
+    statusGlyph(badge, st[2], 10, BLACK, 5, 0, 0.62)
+    self:_image(self.Icons.Notify, function(asset)
+        if not pic.Parent then return end
+        hasPic = true
+        pic.Image = asset
+        tween(pic, 0.35, { ImageTransparency = 0 })
+        fadeGlyph(iconTxt, 0.2, 1)
+        badge.Visible = true
+    end)
+
+    local tag = create("TextLabel", {
+        BackgroundTransparency = 1, Position = UDim2.fromOffset(56, 7), Size = UDim2.new(1, -110, 0, 12),
+        Text = "●  " .. st[3], TextColor3 = st[1], TextSize = 9, Font = Enum.Font.GothamBold,
+        TextXAlignment = Enum.TextXAlignment.Left, Parent = card,
+    })
+    local title = create("TextLabel", {
+        BackgroundTransparency = 1, Position = UDim2.fromOffset(56, 21), Size = UDim2.new(1, -66, 0, 16),
+        Text = o.Title or "Notification", TextColor3 = Color3.fromRGB(250, 250, 252), TextSize = 13,
+        Font = Enum.Font.GothamBold, TextXAlignment = Enum.TextXAlignment.Left,
+        TextTruncate = Enum.TextTruncate.AtEnd, Parent = card,
+    })
+    local body = create("TextLabel", {
+        BackgroundTransparency = 1, Position = UDim2.fromOffset(56, 38), Size = UDim2.new(1, -66, 0, 14),
+        Text = o.Content or "", TextColor3 = Color3.fromRGB(150, 150, 158), TextSize = 11,
+        Font = Enum.Font.Gotham, TextXAlignment = Enum.TextXAlignment.Left,
+        TextTruncate = Enum.TextTruncate.AtEnd, Parent = card,
+    })
+    local clock = create("TextLabel", {
+        BackgroundTransparency = 1, Position = UDim2.new(1, -62, 0, 7), Size = UDim2.fromOffset(34, 12),
+        Text = os.date("%H:%M"), TextColor3 = Color3.fromRGB(110, 110, 118), TextSize = 10,
+        Font = Enum.Font.Gotham, TextXAlignment = Enum.TextXAlignment.Right, Parent = card,
+    })
+
+    local close = create("TextButton", {
+        BackgroundTransparency = 1, Position = UDim2.new(1, -24, 0, 4), Size = UDim2.fromOffset(20, 18),
+        Text = "X", TextColor3 = Color3.fromRGB(150, 150, 158), TextSize = 11, Font = Enum.Font.GothamBold, Parent = card,
+    })
+
+    local bar = create("Frame", {
+        Position = UDim2.new(0, 0, 1, -3), Size = UDim2.new(1, 0, 0, 3),
+        BackgroundColor3 = WHITE, BorderSizePixel = 0, Parent = card,
+    })
+    gradient(bar, "AccentGrad")
+
+    local cardScale = create("UIScale", { Parent = card })
+    card.MouseEnter:Connect(function() tween(cardScale, 0.25, { Scale = 1.035 }, Enum.EasingStyle.Back) end)
+    card.MouseLeave:Connect(function() tween(cardScale, 0.25, { Scale = 1 }, Enum.EasingStyle.Back) end)
+    local dead = false
+    local function dismiss()
+        if dead then return end
+        dead = true
+        tween(slide, 0.3, { Position = UDim2.fromOffset(330, 0), Rotation = -10 }, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+        task.delay(0.32, function() spin:Disconnect(); wrap:Destroy() end)
+    end
+    close.MouseButton1Click:Connect(dismiss)
+
+    -- interactive buttons: Notify({ Buttons = { { Text = "Yes", Callback = fn }, { Text = "No" } } })
+    if type(o.Buttons) == "table" and #o.Buttons > 0 then
+        wrap.Size = UDim2.new(1, 0, 0, 98)
+        local btnHolder = create("Frame", {
+            Position = UDim2.fromOffset(56, 60), Size = UDim2.new(1, -66, 0, 24),
+            BackgroundTransparency = 1, Parent = card,
+        })
+        create("UIListLayout", {
+            FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 6),
+            SortOrder = Enum.SortOrder.LayoutOrder, Parent = btnHolder,
+        })
+        for idx, bInfo in ipairs(o.Buttons) do
+            local b = create("TextButton", {
+                Size = UDim2.new(0, 72, 1, 0), BackgroundColor3 = Color3.fromRGB(30, 30, 34),
+                Text = bInfo.Text or "Button", TextSize = 10, Font = Enum.Font.GothamBold,
+                TextColor3 = WHITE, AutoButtonColor = false, LayoutOrder = idx, Parent = btnHolder,
+            })
+            corner(b, 6)
+            create("UIStroke", { Thickness = 1, Color = Color3.fromRGB(90, 90, 98), Transparency = 0.3, Parent = b })
+            b.MouseEnter:Connect(function() tween(b, 0.15, { BackgroundColor3 = Color3.fromRGB(52, 52, 58) }) end)
+            b.MouseLeave:Connect(function() tween(b, 0.15, { BackgroundColor3 = Color3.fromRGB(30, 30, 34) }) end)
+            b.MouseButton1Click:Connect(function()
+                Yqantg:_sfx("Click")
+                if bInfo.Callback then task.spawn(bInfo.Callback) end
+                dismiss()
+            end)
+        end
+    end
+
+    tween(slide, 0.7, { Position = UDim2.fromOffset(0, 0), Rotation = 0 }, Enum.EasingStyle.Back)
+    task.delay(0.2, function()
+        tween(icon, 0.5, { Size = UDim2.fromOffset(36, 36) }, Enum.EasingStyle.Back)
+        if not hasPic then fadeGlyph(iconTxt, 0.3, 0) end
+    end)
+    tween(bar, duration, { Size = UDim2.new(0, 0, 0, 3) }, Enum.EasingStyle.Linear)
+    task.delay(duration, dismiss)
+end
+
+----------------------------------------------------------------------
+-- Boot intro (baked into the library)
+-- Plays automatically once, the moment the library is loaded, and
+-- blocks the loader until it finishes. Scripts that use the library
+-- cannot remove, skip or customise it.  Yqantg:Splash() is kept only
+-- for backwards compatibility: it just waits for the intro to end.
+----------------------------------------------------------------------
+local Intro = { running = false, done = false }
+
+local function playIntro(self)
+    if Intro.running or Intro.done then return end
+    Intro.running = true
+
+    self:_ensureGui()
+    -- dedicated full-screen gui: ScreenInsets = None so it also covers the notch / safe-area bars
+    local g = create("ScreenGui", {
+        Name = "YqantgIntro_" .. HttpService:GenerateGUID(false):sub(1, 6),
+        ResetOnSpawn = false, IgnoreGuiInset = true, DisplayOrder = 2147483000,
+        ZIndexBehavior = Enum.ZIndexBehavior.Sibling, Archivable = false,
+    })
+    g.DescendantAdded:Connect(function(d) pcall(function() d.Archivable = false end) end)
+    pcall(function() g.ScreenInsets = Enum.ScreenInsets.None end)
+    Compat.mountGui(g)
+    local TextService = svc("TextService")
+
     -- ===== BLACK FLASH (red) =============================================================
     -- dark void -> cracking black lightning with red edges -> the title is slammed in with a
     -- white/red impact flash, shockwaves, sparks and screen shake -> loading -> final strike
@@ -1502,7 +1687,7 @@ local function playIntro(self)
             if t == Enum.UserInputType.Touch or t == Enum.UserInputType.MouseButton1 or t == Enum.UserInputType.Keyboard then skip = true end
         end)
 
-        ------------------------------------------------------------ curtain (two halves, tilted so the cut is a diagonal slash)
+        ------------------------------------------------------------ curtain (two halves, tilted so the exit cut is a diagonal slash)
         local curtain = create("Frame", {
             AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromScale(2.4, 2.4),
             BackgroundTransparency = 1, Rotation = -9, ZIndex = 200, Parent = root,
@@ -1512,7 +1697,7 @@ local function playIntro(self)
                 Position = UDim2.fromScale(0, top and 0 or .5), Size = UDim2.fromScale(1, .5), BackgroundColor3 = WHITE,
                 BackgroundTransparency = 1, BorderSizePixel = 0, ZIndex = 200, Parent = curtain,
             })
-            create("UIGradient", { Color = ColorSequence.new(Color3.fromRGB(2, 0, 3), Color3.fromRGB(18, 2, 8)), Rotation = top and 90 or -90, Parent = f })
+            create("UIGradient", { Color = ColorSequence.new(Color3.fromRGB(3, 0, 3), Color3.fromRGB(20, 2, 6)), Rotation = top and 90 or -90, Parent = f })
             return f
         end
         local topH, botH = half(true), half(false)
@@ -1533,10 +1718,12 @@ local function playIntro(self)
                 BackgroundTransparency = 1, BorderSizePixel = 0, ZIndex = z, Parent = stage,
             })
         end
+        local TOUCH = UserInputService.TouchEnabled
+        local BAR = math.floor(SH * 0.07)                 -- cinematic letterbox bar height
 
-        ------------------------------------------------------------ vignette (red-black edges, pulses with the impacts)
+        ------------------------------------------------------------ vignette (blood-black edges)
         local vig = {}
-        for _, e in ipairs({ { 0, 0, 1, .34, 90 }, { 0, .66, 1, .34, -90 }, { 0, 0, .26, 1, 0 }, { .74, 0, .26, 1, 180 } }) do
+        for _, e in ipairs({ { 0, 0, 1, .36, 90 }, { 0, .64, 1, .36, -90 }, { 0, 0, .28, 1, 0 }, { .72, 0, .28, 1, 180 } }) do
             local f = create("Frame", {
                 Position = UDim2.fromScale(e[1], e[2]), Size = UDim2.fromScale(e[3], e[4]), BackgroundColor3 = DEEP,
                 BackgroundTransparency = 1, BorderSizePixel = 0, ZIndex = 3, Parent = stage,
@@ -1546,149 +1733,19 @@ local function playIntro(self)
         end
         local vigA, vigTarget = 1, 1
 
-        ------------------------------------------------------------ embers (rising red specks)
+        ------------------------------------------------------------ hell embers (few, slow, rising)
         local embers = {}
-        for i = 1, UserInputService.TouchEnabled and 22 or 40 do
-            local sz = math.random() < 0.25 and 3 or 2
+        for i = 1, TOUCH and 14 or 26 do
+            local sz = math.random() < 0.3 and 3 or 2
             local f = create("Frame", {
-                AnchorPoint = Vector2.new(.5, .5), Size = UDim2.fromOffset(sz, sz), BackgroundColor3 = (math.random() < 0.3) and WHITE or RED,
+                AnchorPoint = Vector2.new(.5, .5), Size = UDim2.fromOffset(sz, sz), BackgroundColor3 = (math.random() < 0.5) and HOT or RED,
                 BorderSizePixel = 0, BackgroundTransparency = 1, ZIndex = 2, Parent = stage,
             })
-            embers[i] = { f = f, x = math.random(), y = math.random(), v = 0.03 + math.random() * 0.09, tw = 1 + math.random() * 3, ph = math.random() * 6.28, al = 0.3 + math.random() * 0.5, sway = math.random() * 0.02 }
+            embers[i] = { f = f, x = math.random(), y = math.random(), v = 0.03 + math.random() * 0.07, tw = 1 + math.random() * 3, ph = math.random() * 6.28, al = 0.3 + math.random() * 0.5, sway = math.random() * 0.02 }
         end
         local embersOn = false
 
-        ------------------------------------------------------------ flash layer + helpers
-        local flashF = layer(15)
-        local function flash(col, a, dur)
-            flashF.BackgroundColor3 = col; flashF.BackgroundTransparency = a
-            tween(flashF, dur, { BackgroundTransparency = 1 }, Enum.EasingStyle.Quad)
-        end
-        local shakeAmp = 0
-        local function shake(a) shakeAmp = math.max(shakeAmp, a) end
-        local BAR = math.floor(SH * 0.07)                 -- cinematic letterbox bar height
-        local punch = 0                                   -- camera zoom punch (decays)
-        local function kick(a) punch = math.max(punch, a) end
-
-        local function seg(x0, y0, x1, y1, thick, col, tr, z)
-            local dx, dy = x1 - x0, y1 - y0
-            return create("Frame", {
-                AnchorPoint = Vector2.new(.5, .5), Position = px((x0 + x1) / 2, (y0 + y1) / 2),
-                Size = UDim2.fromOffset(math.sqrt(dx * dx + dy * dy) + thick * 0.6, thick), Rotation = math.deg(math.atan2(dy, dx)),
-                BackgroundColor3 = col, BackgroundTransparency = tr, BorderSizePixel = 0, ZIndex = z, Parent = stage,
-            })
-        end
-
-        -- one black lightning bolt (red glow underneath, black core on top)
-        local function bolt(ang, len, big, ox, oy)
-            local dirx, diry = math.cos(ang), math.sin(ang)
-            local nx, ny = -diry, dirx
-            local n = big and 9 or 6
-            local pts = { { ox, oy } }
-            for i = 1, n do
-                local d = len * i / n
-                local off = (math.random() - 0.5) * (big and 78 or 46) * (i < n and 1 or 0.4)
-                pts[#pts + 1] = { ox + dirx * d + nx * off, oy + diry * d + ny * off }
-            end
-            local list = {}
-            for i = 1, #pts - 1 do
-                local a, b = pts[i], pts[i + 1]
-                list[i] = {
-                    seg(a[1], a[2], b[1], b[2], big and 12 or 7, RED, 1, 20),
-                    seg(a[1], a[2], b[1], b[2], big and 4.5 or 2.6, BLK, 1, 21),
-                }
-                -- short side branch every few segments
-                if big and i % 3 == 2 then
-                    local ba = ang + (math.random() < 0.5 and -1 or 1) * (0.5 + math.random() * 0.5)
-                    local bl = len * (0.12 + math.random() * 0.12)
-                    local ex, ey = b[1] + math.cos(ba) * bl, b[2] + math.sin(ba) * bl
-                    list[#list + 1] = { seg(b[1], b[2], ex, ey, 7, RED, 1, 20), seg(b[1], b[2], ex, ey, 2.4, BLK, 1, 21) }
-                end
-            end
-            task.spawn(function()
-                for i, s in ipairs(list) do
-                    s[1].BackgroundTransparency = 0.4; s[2].BackgroundTransparency = 0
-                    if i % 2 == 0 then task.wait() end
-                end
-                for f = 1, 3 do
-                    task.wait(0.04)
-                    for _, s in ipairs(list) do s[1].BackgroundTransparency = (f % 2 == 1) and 0.85 or 0.3 end
-                end
-                task.wait(0.06)
-                for _, s in ipairs(list) do
-                    tween(s[1], 0.32, { BackgroundTransparency = 1 }); tween(s[2], 0.32, { BackgroundTransparency = 1 })
-                end
-                task.wait(0.36)
-                for _, s in ipairs(list) do s[1]:Destroy(); s[2]:Destroy() end
-            end)
-        end
-        local function bolts(n, big, ox, oy, reach)
-            local base = math.random() * 6.283
-            for i = 1, n do
-                local a = base + (i / n) * 6.283 + (math.random() - 0.5) * 0.5
-                bolt(a, (reach or 220) * (0.65 + math.random() * 0.6), big, ox or 0, oy or CY)
-            end
-        end
-
-        -- sparks
-        local sparks = {}
-        local function sparkBurst(n, spd, ox, oy)
-            for _ = 1, n do
-                local a, v = math.random() * 6.283, spd * (0.25 + math.random() * 0.95)
-                local sz = math.random(2, 5)
-                local f = create("Frame", {
-                    AnchorPoint = Vector2.new(.5, .5), Size = UDim2.fromOffset(sz * (math.random() < .5 and 1 or 3), sz), Rotation = math.deg(a),
-                    BackgroundColor3 = (math.random() < 0.35) and WHITE or RED, BorderSizePixel = 0, ZIndex = 25, Parent = stage,
-                })
-                local life = 0.45 + math.random() * 0.7
-                sparks[#sparks + 1] = { f = f, x = ox or 0, y = oy or CY, vx = math.cos(a) * v, vy = math.sin(a) * v, life = life, max = life }
-            end
-        end
-
-        local function speedLines(n)
-            for _ = 1, n do
-                local y = (math.random() - .5) * SH
-                local d = 0.26 + math.random() * 0.2
-                local f = create("Frame", {
-                    AnchorPoint = Vector2.new(.5, .5), Position = px(SW * 0.7, y), Size = UDim2.fromOffset(math.random(180, 460), math.random() < .3 and 3 or 1.5),
-                    BackgroundColor3 = (math.random() < 0.4) and WHITE or RED, BackgroundTransparency = 0.15, BorderSizePixel = 0, ZIndex = 12, Parent = stage,
-                })
-                tween(f, d, { Position = px(-SW * 0.7, y) }, Enum.EasingStyle.Quad)
-                tween(f, d, { BackgroundTransparency = 1 }, Enum.EasingStyle.Linear)
-                task.delay(d + 0.05, function() f:Destroy() end)
-            end
-        end
-
-        local function shock(col, thick, d, y)
-            local w = create("Frame", { AnchorPoint = Vector2.new(.5, .5), Position = px(0, y or CY), Size = UDim2.fromOffset(40, 40), BackgroundTransparency = 1, ZIndex = 18, Parent = stage })
-            corner(w, 500)
-            local ws = create("UIStroke", { Thickness = thick, Color = col, Parent = w })
-            tween(w, d, { Size = UDim2.fromOffset(1400, 1400) }, Enum.EasingStyle.Quint)
-            tween(ws, d, { Transparency = 1, Thickness = 0.5 })
-            task.delay(d + 0.05, function() w:Destroy() end)
-        end
-
-        ------------------------------------------------------------ horizon line (a thin red cut through the void)
-        local line = create("Frame", {
-            AnchorPoint = Vector2.new(.5, .5), Position = px(0, CY), Size = UDim2.fromOffset(0, 1), BackgroundColor3 = RED,
-            BorderSizePixel = 0, ZIndex = 4, Parent = stage,
-        })
-        create("UIGradient", { Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.5, 0.2), NumberSequenceKeypoint.new(1, 1) }), Parent = line })
-
-        ------------------------------------------------------------ corner brackets
-        local brackets = {}
-        for _, c in ipairs({ { 0, 0 }, { 1, 0 }, { 0, 1 }, { 1, 1 } }) do
-            local ax, ay = c[1], c[2]
-            local sx, sy = ax == 0 and 1 or -1, ay == 0 and 1 or -1
-            for _, sz in ipairs({ UDim2.fromOffset(26, 2), UDim2.fromOffset(2, 26) }) do
-                brackets[#brackets + 1] = create("Frame", {
-                    AnchorPoint = Vector2.new(ax, ay), Position = UDim2.new(ax, sx * 18, ay, sy * (18 + BAR)), Size = sz,
-                    BackgroundColor3 = RED, BackgroundTransparency = 1, BorderSizePixel = 0, ZIndex = 5, Parent = stage,
-                })
-            end
-        end
-
-        ------------------------------------------------------------ letterbox bars (slide in = cinematic)
+        ------------------------------------------------------------ cinematic letterbox
         local bars = {}
         for i = 1, 2 do
             local top = i == 1
@@ -1698,288 +1755,214 @@ local function playIntro(self)
             })
             create("Frame", {
                 AnchorPoint = Vector2.new(0, top and 1 or 0), Position = UDim2.fromScale(0, top and 1 or 0), Size = UDim2.new(1, 0, 0, 1),
-                BackgroundColor3 = RED, BackgroundTransparency = 0.35, BorderSizePixel = 0, ZIndex = 15, Parent = b,
+                BackgroundColor3 = RED, BackgroundTransparency = 0.45, BorderSizePixel = 0, ZIndex = 15, Parent = b,
             })
             bars[i] = b
         end
 
-        ------------------------------------------------------------ ember dot (the spark before the first strike)
-        local ember = create("Frame", { AnchorPoint = Vector2.new(.5, .5), Position = px(0, CY), Size = UDim2.fromOffset(4, 4), BackgroundColor3 = RED, BackgroundTransparency = 1, BorderSizePixel = 0, ZIndex = 6, Parent = stage })
-        corner(ember, 5)
-        local emberGlow = create("UIStroke", { Thickness = 6, Color = RED, Transparency = 1, Parent = ember })
+        ------------------------------------------------------------ helpers: flash / shake / punch / line / crack / spark / shock
+        local flashF = layer(15)
+        local function flash(col, a, dur)
+            flashF.BackgroundColor3 = col; flashF.BackgroundTransparency = a
+            tween(flashF, dur, { BackgroundTransparency = 1 }, Enum.EasingStyle.Quad)
+        end
+        local shakeAmp, punch = 0, 0
+        local function shake(a) shakeAmp = math.max(shakeAmp, a) end
+        local function kick(a) punch = math.max(punch, a) end
 
-        ------------------------------------------------------------ emblem core (ticks + progress ring + disc)
-        local core = create("Frame", { AnchorPoint = Vector2.new(.5, .5), Position = px(0, CY), Size = UDim2.fromOffset(200, 200), BackgroundTransparency = 1, ZIndex = 10, Parent = stage })
-        local coreS = create("UIScale", { Scale = 0, Parent = core })
-        local ticks = create("Frame", { AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromOffset(176, 176), BackgroundTransparency = 1, ZIndex = 2, Parent = core })
-        local NT = 72
+        local function seg(parent, x0, y0, x1, y1, thick, col, tr, z, grow)
+            local dx, dy = x1 - x0, y1 - y0
+            local len = math.sqrt(dx * dx + dy * dy) + thick * 0.5
+            local f = create("Frame", {
+                AnchorPoint = Vector2.new(.5, .5), Position = px((x0 + x1) / 2, (y0 + y1) / 2),
+                Size = UDim2.fromOffset(grow and 0 or len, thick), Rotation = math.deg(math.atan2(dy, dx)),
+                BackgroundColor3 = col, BackgroundTransparency = tr, BorderSizePixel = 0, ZIndex = z, Parent = parent,
+            })
+            if grow then tween(f, grow, { Size = UDim2.fromOffset(len, thick) }, Enum.EasingStyle.Quad) end
+            return f
+        end
+
+        -- jagged crimson crack (red glow + hot core), used sparingly
+        local function crack(ang, len, ox, oy)
+            local dx, dy = math.cos(ang), math.sin(ang)
+            local nx, ny = -dy, dx
+            local n = 7
+            local pts = { { ox, oy } }
+            for i = 1, n do
+                local d = len * i / n
+                local off = (math.random() - 0.5) * 34 * (i < n and 1 or 0.3)
+                pts[#pts + 1] = { ox + dx * d + nx * off, oy + dy * d + ny * off }
+            end
+            local list = {}
+            for i = 1, #pts - 1 do
+                local a, b = pts[i], pts[i + 1]
+                local th = 3.2 - (i / n) * 1.6
+                list[i] = { seg(stage, a[1], a[2], b[1], b[2], th + 5, RED, 1, 20), seg(stage, a[1], a[2], b[1], b[2], th, HOT, 1, 21) }
+            end
+            task.spawn(function()
+                for _, s in ipairs(list) do
+                    s[1].BackgroundTransparency = 0.55; s[2].BackgroundTransparency = 0.05
+                    task.wait(0.012)
+                end
+                task.wait(0.14)
+                for _, s in ipairs(list) do tween(s[1], 0.5, { BackgroundTransparency = 1 }); tween(s[2], 0.5, { BackgroundTransparency = 1 }) end
+                task.wait(0.55)
+                for _, s in ipairs(list) do s[1]:Destroy(); s[2]:Destroy() end
+            end)
+        end
+        local function cracks(n, ox, oy, reach)
+            local base = math.random() * 6.283
+            for i = 1, n do crack(base + (i / n) * 6.283 + (math.random() - 0.5) * 0.4, reach * (0.7 + math.random() * 0.5), ox, oy) end
+        end
+
+        local sparks = {}
+        local function sparkBurst(n, spd, ox, oy)
+            for _ = 1, n do
+                local a, v = math.random() * 6.283, spd * (0.25 + math.random() * 0.95)
+                local sz = math.random(2, 4)
+                local f = create("Frame", {
+                    AnchorPoint = Vector2.new(.5, .5), Size = UDim2.fromOffset(sz * (math.random() < .5 and 1 or 3), sz), Rotation = math.deg(a),
+                    BackgroundColor3 = (math.random() < 0.5) and HOT or RED, BorderSizePixel = 0, ZIndex = 25, Parent = stage,
+                })
+                local life = 0.45 + math.random() * 0.7
+                sparks[#sparks + 1] = { f = f, x = ox or 0, y = oy or CY, vx = math.cos(a) * v, vy = math.sin(a) * v, life = life, max = life }
+            end
+        end
+        local function shock(col, thick, d)
+            local w = create("Frame", { AnchorPoint = Vector2.new(.5, .5), Position = px(0, CY), Size = UDim2.fromOffset(40, 40), BackgroundTransparency = 1, ZIndex = 18, Parent = stage })
+            corner(w, 500)
+            local ws = create("UIStroke", { Thickness = thick, Color = col, Parent = w })
+            tween(w, d, { Size = UDim2.fromOffset(1300, 1300) }, Enum.EasingStyle.Quint)
+            tween(ws, d, { Transparency = 1, Thickness = 0.5 })
+            task.delay(d + 0.05, function() w:Destroy() end)
+        end
+
+        ------------------------------------------------------------ THE SIGIL: circles + ticks + pentagram (drawn line by line)
+        local sigil = create("Frame", { AnchorPoint = Vector2.new(.5, .5), Position = px(0, CY), Size = UDim2.fromOffset(240, 240), BackgroundTransparency = 1, ZIndex = 8, Parent = stage })
+        local sigilS = create("UIScale", { Scale = 1, Parent = sigil })
+        local sigilParts, sigilStrokes = {}, {}
+
+        local ticks = create("Frame", { AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromOffset(222, 222), BackgroundTransparency = 1, ZIndex = 8, Parent = sigil })
+        local NT = 60
         for i = 0, NT - 1 do
             local a = (i / NT) * math.pi * 2
-            local major = i % 6 == 0
-            create("Frame", {
-                AnchorPoint = Vector2.new(.5, .5), Size = UDim2.fromOffset(major and 2 or 1, major and 10 or 4),
-                Position = UDim2.new(.5, math.cos(a) * 86, .5, math.sin(a) * 86), Rotation = math.deg(a) - 90,
-                BackgroundColor3 = major and RED or WHITE, BackgroundTransparency = major and 0.1 or 0.7, BorderSizePixel = 0, ZIndex = 2, Parent = ticks,
+            local major = i % 5 == 0
+            local tk = create("Frame", {
+                AnchorPoint = Vector2.new(.5, .5), Size = UDim2.fromOffset(major and 2 or 1, major and 11 or 5),
+                Position = UDim2.new(.5, math.cos(a) * 109, .5, math.sin(a) * 109), Rotation = math.deg(a) - 90,
+                BackgroundColor3 = major and RED or WHITE, BackgroundTransparency = 1, BorderSizePixel = 0, ZIndex = 8, Parent = ticks,
             })
+            sigilParts[#sigilParts + 1] = { f = tk, a = major and 0.1 or 0.78 }
         end
-        local ringBox = create("Frame", { AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromOffset(136, 136), BackgroundTransparency = 1, ZIndex = 3, Parent = core })
-        local track = create("Frame", { Position = UDim2.fromOffset(6, 6), Size = UDim2.fromOffset(124, 124), BackgroundTransparency = 1, Parent = ringBox })
-        corner(track, 500)
-        create("UIStroke", { Thickness = 2, Color = RED, Transparency = 0.82, Parent = track })
-        local stepSeq = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(0.499, 0), NumberSequenceKeypoint.new(0.5, 1), NumberSequenceKeypoint.new(1, 1) })
-        local function ringHalf(isRight)
-            local clip = create("Frame", { Position = UDim2.fromOffset(isRight and 68 or 0, 0), Size = UDim2.fromOffset(68, 136), BackgroundTransparency = 1, ClipsDescendants = true, ZIndex = 3, Parent = ringBox })
-            local c = create("Frame", { Position = UDim2.fromOffset(isRight and -62 or 6, 6), Size = UDim2.fromOffset(124, 124), BackgroundTransparency = 1, Parent = clip })
-            corner(c, 500)
-            local st = create("UIStroke", { Thickness = 3, Color = RED, Parent = c })
-            return create("UIGradient", { Transparency = stepSeq, Rotation = isRight and 0 or 180, Parent = st })
+        local function ringStroke(size, thick)
+            local f = create("Frame", { AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromOffset(size * 0.72, size * 0.72), BackgroundTransparency = 1, ZIndex = 9, Parent = sigil })
+            corner(f, 500)
+            local s = create("UIStroke", { Thickness = thick, Color = RED, Transparency = 1, Parent = f })
+            sigilStrokes[#sigilStrokes + 1] = s
+            return f, s
         end
-        local gRight, gLeft = ringHalf(true), ringHalf(false)
-        local headDot = create("Frame", { AnchorPoint = Vector2.new(.5, .5), Position = UDim2.new(.5, 0, .5, -62), Size = UDim2.fromOffset(9, 9), BackgroundColor3 = WHITE, BorderSizePixel = 0, BackgroundTransparency = 1, ZIndex = 6, Parent = ringBox })
-        corner(headDot, 5)
-        create("UIStroke", { Thickness = 3, Color = RED, Transparency = 0.4, Parent = headDot })
-        local function setProgress(p)
-            local th = math.clamp(p, 0, 1) * 360
-            gRight.Rotation = math.min(th, 180)
-            gLeft.Rotation = math.max(th, 180)
-            local r = math.rad(th)
-            headDot.Position = UDim2.new(.5, math.sin(r) * 62, .5, -math.cos(r) * 62)
-            headDot.BackgroundTransparency = p > 0.003 and 0 or 1
-        end
-        setProgress(0)
-        local disc = create("Frame", { AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromOffset(94, 94), BackgroundColor3 = BLK, BorderSizePixel = 0, ZIndex = 4, Parent = core })
-        corner(disc, 47)
-        create("UIStroke", { Thickness = 2, Color = RED, Transparency = 0.15, Parent = disc })
-        local discLetter = create("TextLabel", {
-            AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1,
-            Text = TITLE:sub(1, 1), TextSize = 46, Font = Enum.Font.GothamBlack, TextColor3 = WHITE, ZIndex = 5, Parent = disc,
-        })
-        local discGhost = create("TextLabel", {
-            AnchorPoint = Vector2.new(.5, .5), Position = UDim2.new(.5, 2, .5, 2), Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1,
-            Text = TITLE:sub(1, 1), TextSize = 46, Font = Enum.Font.GothamBlack, TextColor3 = RED, ZIndex = 4, Parent = disc,
-        })
-        local pulse = TweenService:Create(disc, TweenInfo.new(0.9, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), { Size = UDim2.fromOffset(101, 101) })
+        local ringA, ringAS = ringStroke(188, 2)
+        local ringB, ringBS = ringStroke(164, 1)
 
-        ------------------------------------------------------------ title (stamped in on impact, red ghost for the glitch)
+        local PR = 82                                           -- pentagram radius
+        local V = {}
+        for i = 0, 4 do
+            local a = -math.pi / 2 + i * (math.pi * 2 / 5)
+            V[i] = { PR * math.cos(a), PR * math.sin(a) }
+        end
+        local starOrder = { 0, 2, 4, 1, 3, 0 }
+        local starLines = {}
+
+        ------------------------------------------------------------ THE EYE (opens in the middle of the pentagram)
+        local eyeGlow = create("Frame", { AnchorPoint = Vector2.new(.5, .5), Position = px(0, CY), Size = UDim2.fromOffset(190, 96), BackgroundColor3 = RED, BackgroundTransparency = 1, BorderSizePixel = 0, ZIndex = 10, Parent = stage })
+        corner(eyeGlow, 500)
+        local eye = create("Frame", {
+            AnchorPoint = Vector2.new(.5, .5), Position = px(0, CY), Size = UDim2.fromOffset(104, 2), BackgroundColor3 = Color3.fromRGB(26, 0, 5),
+            BorderSizePixel = 0, ClipsDescendants = true, ZIndex = 11, Parent = stage,
+        })
+        corner(eye, 500)
+        local eyeStroke = create("UIStroke", { Thickness = 2, Color = RED, Transparency = 1, Parent = eye })
+        local iris = create("Frame", { AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromOffset(38, 38), BackgroundColor3 = WHITE, BorderSizePixel = 0, ZIndex = 12, Parent = eye })
+        corner(iris, 500)
+        create("UIGradient", { Color = ColorSequence.new({ ColorSequenceKeypoint.new(0, HOT), ColorSequenceKeypoint.new(1, RED) }), Rotation = 90, Parent = iris })
+        create("UIStroke", { Thickness = 2, Color = DEEP, Parent = iris })
+        local pupil = create("Frame", { AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromOffset(6, 32), BackgroundColor3 = BLK, BorderSizePixel = 0, ZIndex = 13, Parent = iris })
+        corner(pupil, 4)
+        local glint = create("Frame", { AnchorPoint = Vector2.new(.5, .5), Position = UDim2.new(.5, -9, .5, -8), Size = UDim2.fromOffset(4, 4), BackgroundColor3 = WHITE, BackgroundTransparency = 0.15, BorderSizePixel = 0, ZIndex = 14, Parent = iris })
+        corner(glint, 3)
+        local eyeOpen, eyeFlick = false, 0
+
+        ------------------------------------------------------------ TITLE (rises out of the dark, blood-dipped, with drips)
         local tHolder = create("Frame", {
-            AnchorPoint = Vector2.new(.5, 0), Position = px(0, 52), Size = UDim2.fromOffset(0, 40), AutomaticSize = Enum.AutomaticSize.X,
+            AnchorPoint = Vector2.new(.5, 0), Position = px(0, 76), Size = UDim2.fromOffset(0, 42), AutomaticSize = Enum.AutomaticSize.X,
             BackgroundTransparency = 1, ZIndex = 12, Parent = stage,
         })
-        create("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 5), HorizontalAlignment = Enum.HorizontalAlignment.Center, Parent = tHolder })
+        create("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 8), HorizontalAlignment = Enum.HorizontalAlignment.Center, Parent = tHolder })
         local letters = {}
         local li = 0
-        local titleW = -5
         for _, cp in utf8.codes(TITLE) do
             li = li + 1
             local ch = utf8.char(cp)
-            local w = 22
-            pcall(function() w = math.ceil(TextService:GetTextSize(ch, 32, Enum.Font.GothamBlack, Vector2.new(1000, 100)).X) + 2 end)
-            local slot = create("Frame", { LayoutOrder = li, Size = UDim2.fromOffset(w, 40), BackgroundTransparency = 1, Parent = tHolder })
-            titleW = titleW + w + 5
-            local sc = create("UIScale", { Scale = 3, Parent = slot })
-            local gh = create("TextLabel", { Position = UDim2.fromOffset(2, 2), Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Text = ch, TextSize = 32, Font = Enum.Font.GothamBlack, TextColor3 = RED, TextTransparency = 1, ZIndex = 12, Parent = slot })
-            local lb = create("TextLabel", { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Text = ch, TextSize = 32, Font = Enum.Font.GothamBlack, TextColor3 = WHITE, TextTransparency = 1, ZIndex = 13, Parent = slot })
-            letters[li] = { lb = lb, gh = gh, sc = sc }
+            local w = 24
+            pcall(function() w = math.ceil(TextService:GetTextSize(ch, 34, Enum.Font.GothamBlack, Vector2.new(1000, 100)).X) + 2 end)
+            local slot = create("Frame", { LayoutOrder = li, Size = UDim2.fromOffset(w, 42), BackgroundTransparency = 1, Parent = tHolder })
+            local gh = create("TextLabel", { Position = UDim2.fromOffset(2, 18), Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Text = ch, TextSize = 34, Font = Enum.Font.GothamBlack, TextColor3 = RED, TextTransparency = 1, ZIndex = 12, Parent = slot })
+            local lb = create("TextLabel", { Position = UDim2.fromOffset(0, 16), Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Text = ch, TextSize = 34, Font = Enum.Font.GothamBlack, TextColor3 = WHITE, TextTransparency = 1, ZIndex = 13, Parent = slot })
+            create("UIGradient", {
+                Color = ColorSequence.new({ ColorSequenceKeypoint.new(0, WHITE), ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255, 214, 214)), ColorSequenceKeypoint.new(1, Color3.fromRGB(226, 30, 46)) }),
+                Rotation = 90, Parent = lb,
+            })
+            letters[li] = { lb = lb, gh = gh, slot = slot, w = w }
         end
+        local function drip(L)
+            local d = create("Frame", { AnchorPoint = Vector2.new(.5, 0), Position = UDim2.new(.5, math.random(-4, 4), 1, -8), Size = UDim2.fromOffset(2, 0), BackgroundColor3 = RED, BorderSizePixel = 0, ZIndex = 12, Parent = L.slot })
+            corner(d, 2)
+            local len = math.random(12, 34)
+            tween(d, 0.5 + len / 40, { Size = UDim2.fromOffset(2, len) }, Enum.EasingStyle.Quad)
+            task.delay(0.6 + len / 40, function()
+                if not alive or not d.Parent then return end
+                local blob = create("Frame", { AnchorPoint = Vector2.new(.5, .5), Position = UDim2.new(.5, 0, 0, len), Size = UDim2.fromOffset(4, 4), BackgroundColor3 = RED, BorderSizePixel = 0, ZIndex = 12, Parent = d })
+                corner(blob, 3)
+            end)
+        end
+
         local sub = create("TextLabel", {
-            AnchorPoint = Vector2.new(.5, 0), Position = px(0, 100), Size = UDim2.fromOffset(460, 14), BackgroundTransparency = 1, Text = SUBTITLE,
-            TextSize = 10, Font = Enum.Font.GothamBold, TextColor3 = Color3.fromRGB(255, 96, 112), TextTransparency = 1, ZIndex = 12, Parent = stage,
+            AnchorPoint = Vector2.new(.5, 0), Position = px(0, 128), Size = UDim2.fromOffset(420, 12), BackgroundTransparency = 1, Text = SUBTITLE,
+            TextSize = 9, Font = Enum.Font.GothamBold, TextColor3 = Color3.fromRGB(214, 84, 96), TextTransparency = 1, ZIndex = 12, Parent = stage,
         })
+        local subL = create("Frame", { AnchorPoint = Vector2.new(1, .5), Position = px(-150, 134), Size = UDim2.fromOffset(0, 1), BackgroundColor3 = RED, BackgroundTransparency = 0.3, BorderSizePixel = 0, ZIndex = 12, Parent = stage })
+        local subR = create("Frame", { AnchorPoint = Vector2.new(0, .5), Position = px(150, 134), Size = UDim2.fromOffset(0, 1), BackgroundColor3 = RED, BackgroundTransparency = 0.3, BorderSizePixel = 0, ZIndex = 12, Parent = stage })
+        create("UIGradient", { Transparency = NumberSequence.new(1, 0), Parent = subL })
+        create("UIGradient", { Transparency = NumberSequence.new(0, 1), Parent = subR })
+
         local stepL = create("TextLabel", {
-            AnchorPoint = Vector2.new(.5, 0), Position = px(0, 126), Size = UDim2.fromOffset(320, 14), BackgroundTransparency = 1, Text = "",
-            TextSize = 11, Font = Enum.Font.Code, TextColor3 = Color3.fromRGB(235, 205, 210), ZIndex = 12, Parent = stage,
+            AnchorPoint = Vector2.new(.5, 0), Position = px(0, 152), Size = UDim2.fromOffset(320, 14), BackgroundTransparency = 1, Text = "",
+            TextSize = 11, Font = Enum.Font.Code, TextColor3 = Color3.fromRGB(235, 200, 204), ZIndex = 12, Parent = stage,
         })
-        local barBg = create("Frame", { AnchorPoint = Vector2.new(.5, 0), Position = px(0, 150), Size = UDim2.fromOffset(240, 3), BackgroundColor3 = RED, BackgroundTransparency = 1, BorderSizePixel = 0, ZIndex = 12, Parent = stage })
+        local barBg = create("Frame", { AnchorPoint = Vector2.new(.5, 0), Position = px(0, 176), Size = UDim2.fromOffset(260, 2), BackgroundColor3 = RED, BackgroundTransparency = 1, BorderSizePixel = 0, ZIndex = 12, Parent = stage })
         local barFill = create("Frame", { Size = UDim2.fromScale(0, 1), BackgroundColor3 = WHITE, BorderSizePixel = 0, ZIndex = 13, Parent = barBg })
-        create("UIGradient", { Color = ColorSequence.new(RED, WHITE), Parent = barFill })
-        local barHead = create("Frame", { AnchorPoint = Vector2.new(.5, .5), Position = UDim2.new(1, 0, .5, 0), Size = UDim2.fromOffset(9, 9), Rotation = 45, BackgroundColor3 = WHITE, BorderSizePixel = 0, BackgroundTransparency = 1, ZIndex = 14, Parent = barFill })
-        create("UIStroke", { Thickness = 2, Color = RED, Parent = barHead })
+        create("UIGradient", { Color = ColorSequence.new({ ColorSequenceKeypoint.new(0, DEEP), ColorSequenceKeypoint.new(0.7, RED), ColorSequenceKeypoint.new(1, HOT) }), Parent = barFill })
+        local barHead = create("Frame", { AnchorPoint = Vector2.new(.5, .5), Position = UDim2.new(1, 0, .5, 0), Size = UDim2.fromOffset(3, 11), BackgroundColor3 = HOT, BorderSizePixel = 0, BackgroundTransparency = 1, ZIndex = 14, Parent = barFill })
+        create("UIStroke", { Thickness = 3, Color = RED, Transparency = 0.5, Parent = barHead })
         local pct = create("TextLabel", {
-            AnchorPoint = Vector2.new(.5, 0), Position = px(0, 160), Size = UDim2.fromOffset(240, 14), BackgroundTransparency = 1, Text = "0%",
-            TextSize = 11, Font = Enum.Font.GothamBold, TextColor3 = Color3.fromRGB(255, 96, 112), TextTransparency = 1, ZIndex = 12, Parent = stage,
+            AnchorPoint = Vector2.new(.5, 0), Position = px(0, 186), Size = UDim2.fromOffset(260, 14), BackgroundTransparency = 1, Text = "0%",
+            TextSize = 10, Font = Enum.Font.GothamBold, TextColor3 = Color3.fromRGB(214, 84, 96), TextTransparency = 1, ZIndex = 12, Parent = stage,
         })
         local skipL = create("TextLabel", {
             AnchorPoint = Vector2.new(.5, 1), Position = UDim2.new(.5, 0, 1, -(16 + BAR)), Size = UDim2.fromOffset(200, 12), BackgroundTransparency = 1,
             Text = "TAP TO SKIP", TextSize = 9, Font = Enum.Font.GothamBold, TextColor3 = WHITE, TextTransparency = 1, ZIndex = 12, Parent = stage,
         })
 
-        ------------------------------------------------------------ UPGRADE: halo, outer rings, HUD, shine, glass cracks, flying shards, light streaks
-        local TOUCH = UserInputService.TouchEnabled
-        local halo = {}
-        for i = 1, 5 do
-            local sz = 150 + i * 120
-            local h = create("Frame", { AnchorPoint = Vector2.new(.5, .5), Position = px(0, CY), Size = UDim2.fromOffset(sz, sz), BackgroundColor3 = RED, BackgroundTransparency = 1, BorderSizePixel = 0, ZIndex = 1, Parent = stage })
-            corner(h, 500)
-            halo[i] = h
-        end
-        local haloA, haloTarget = 0, 0
-
-        local ring2 = create("Frame", { AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromOffset(196, 196), BackgroundTransparency = 1, ZIndex = 2, Parent = core })
-        for i = 0, 15 do
-            local a = (i / 16) * math.pi * 2
-            local big = i % 4 == 0
-            create("Frame", {
-                AnchorPoint = Vector2.new(.5, .5), Size = UDim2.fromOffset(big and 22 or 9, 2), Position = UDim2.new(.5, math.cos(a) * 97, .5, math.sin(a) * 97),
-                Rotation = math.deg(a) + 90, BackgroundColor3 = big and WHITE or RED, BackgroundTransparency = big and 0.2 or 0.5, BorderSizePixel = 0, ZIndex = 2, Parent = ring2,
-            })
-        end
-        local orb = create("Frame", { AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromOffset(220, 220), BackgroundTransparency = 1, ZIndex = 3, Parent = core })
-        for i = 0, 2 do
-            local a = (i / 3) * math.pi * 2
-            create("Frame", {
-                AnchorPoint = Vector2.new(.5, .5), Position = UDim2.new(.5, math.cos(a) * 110, .5, math.sin(a) * 110), Size = UDim2.fromOffset(5, 5),
-                Rotation = 45, BackgroundColor3 = i == 0 and WHITE or RED, BorderSizePixel = 0, ZIndex = 3, Parent = orb,
-            })
-        end
-
-        -- HUD readouts in the corners
-        local function hud(ax, ay, x, y, txt, align)
-            return create("TextLabel", {
-                AnchorPoint = Vector2.new(ax, ay), Position = UDim2.new(ax, x, ay, y), Size = UDim2.fromOffset(240, 12), BackgroundTransparency = 1, Text = txt,
-                TextSize = 9, Font = Enum.Font.Code, TextColor3 = Color3.fromRGB(255, 96, 112), TextTransparency = 1, TextXAlignment = align, ZIndex = 12, Parent = stage,
-            })
-        end
-        local hudTL = hud(0, 0, 54, BAR + 14, "YQANTG // LIBRARY CORE", Enum.TextXAlignment.Left)
-        local hudTR = hud(1, 0, -54, BAR + 14, "0x000000", Enum.TextXAlignment.Right)
-        local hudBL = hud(0, 1, 54, -(BAR + 14), "BUILD  V" .. tostring(self.Version), Enum.TextXAlignment.Left)
-        local hudBR = hud(1, 1, -54, -(BAR + 14), "-- FPS", Enum.TextXAlignment.Right)
-        local huds = { hudTL, hudTR, hudBL, hudBR }
-        local hexT = 0
-
-        -- light sweep across the title
-        local shineBox = create("Frame", { AnchorPoint = Vector2.new(.5, 0), Position = px(0, 52), Size = UDim2.fromOffset(titleW + 8, 40), BackgroundTransparency = 1, ClipsDescendants = true, ZIndex = 14, Parent = stage })
-        local shineBar = create("Frame", {
-            AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromOffset(-40, 20), Size = UDim2.fromOffset(24, 90), Rotation = 18,
-            BackgroundColor3 = Color3.fromRGB(255, 130, 145), BackgroundTransparency = 0.3, BorderSizePixel = 0, Visible = false, ZIndex = 14, Parent = shineBox,
-        })
-        create("UIGradient", { Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.5, 0), NumberSequenceKeypoint.new(1, 1) }), Parent = shineBar })
-        local function shine()
-            if not alive then return end
-            shineBar.Position = UDim2.fromOffset(-40, 20); shineBar.Visible = true
-            tween(shineBar, 0.8, { Position = UDim2.fromOffset(titleW + 48, 20) }, Enum.EasingStyle.Quad)
-            task.delay(0.85, function() if shineBar.Parent then shineBar.Visible = false end end)
-        end
-
-        -- anamorphic light streak
-        local function streak(y, long)
-            local w = long and SW * 1.3 or SW * 0.8
-            local function mk(h, col, tr, z)
-                local f = create("Frame", { AnchorPoint = Vector2.new(.5, .5), Position = px(0, y or CY), Size = UDim2.fromOffset(0, h), BackgroundColor3 = col, BackgroundTransparency = tr, BorderSizePixel = 0, ZIndex = z, Parent = stage })
-                create("UIGradient", { Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.5, 0), NumberSequenceKeypoint.new(1, 1) }), Parent = f })
-                return f
-            end
-            local a, b = mk(3, WHITE, 0, 19), mk(14, RED, 0.45, 18)
-            tween(a, 0.12, { Size = UDim2.fromOffset(w, 3) }, Enum.EasingStyle.Quint)
-            tween(b, 0.12, { Size = UDim2.fromOffset(w, 14) }, Enum.EasingStyle.Quint)
-            task.delay(0.12, function()
-                tween(a, 0.5, { Size = UDim2.fromOffset(w, 0), BackgroundTransparency = 1 }, Enum.EasingStyle.Quad)
-                tween(b, 0.5, { Size = UDim2.fromOffset(w, 0), BackgroundTransparency = 1 }, Enum.EasingStyle.Quad)
-            end)
-            task.delay(0.7, function() a:Destroy(); b:Destroy() end)
-        end
-
-        -- glass crack web: rays from the impact + rings joining them
-        local crackParts = {}
-        local function crackWeb(ox, oy, rays, reach)
-            local steps = TOUCH and 4 or 6
-            local base = math.random() * 6.283
-            local pts, made = {}, {}
-            for r = 1, rays do
-                local ang = base + (r / rays) * 6.283 + (math.random() - 0.5) * 0.35
-                local dx, dy = math.cos(ang), math.sin(ang)
-                local nx, ny = -dy, dx
-                local p = { { ox, oy } }
-                for st = 1, steps do
-                    local d = reach * st / steps * (0.9 + math.random() * 0.2)
-                    local off = (math.random() - 0.5) * 16
-                    p[#p + 1] = { ox + dx * d + nx * off, oy + dy * d + ny * off }
-                end
-                pts[r] = p
-                for st = 1, steps do
-                    local a, b = p[st], p[st + 1]
-                    local th = 2.2 - (st / steps) * 1.2
-                    made[#made + 1] = { seg(a[1], a[2], b[1], b[2], th + 4, RED, 1, 8), 0.78, st }
-                    made[#made + 1] = { seg(a[1], a[2], b[1], b[2], th, WHITE, 1, 9), 0.15, st }
-                end
-            end
-            for _, st in ipairs(TOUCH and { 2, 4 } or { 2, 4, 5 }) do
-                for r = 1, rays do
-                    local a, b = pts[r][st + 1], pts[r % rays + 1][st + 1]
-                    made[#made + 1] = { seg(a[1], a[2], b[1], b[2], 1.2, WHITE, 1, 9), 0.4, st }
-                end
-            end
-            for _, m in ipairs(made) do
-                crackParts[#crackParts + 1] = m[1]
-                task.delay(m[3] * 0.035, function()
-                    if m[1].Parent then tween(m[1], 0.1, { BackgroundTransparency = m[2] }) end
-                end)
-            end
-        end
-        local function crackBreak()
-            for _, f in ipairs(crackParts) do
-                if f.Parent then
-                    tween(f, 0.12, { BackgroundTransparency = 0 })
-                    task.delay(0.14, function() if f.Parent then tween(f, 0.35, { BackgroundTransparency = 1 }) end end)
-                    task.delay(0.55, function() f:Destroy() end)
-                end
-            end
-            crackParts = {}
-        end
-
-        -- flying glass shards (spin, gravity, fade)
-        local shardsL = {}
-        local function shardBurst(n, spd, ox, oy)
-            if TOUCH then n = math.floor(n * 0.6) end
-            local cols = { WHITE, Color3.fromRGB(255, 70, 90), Color3.fromRGB(255, 26, 52), Color3.fromRGB(20, 0, 6), Color3.fromRGB(235, 235, 245) }
-            for _ = 1, n do
-                local a = math.random() * 6.283
-                local v = spd * (0.3 + math.random() * 0.9)
-                local f = create("Frame", {
-                    AnchorPoint = Vector2.new(.5, .5), Position = px(ox or 0, oy or CY), Size = UDim2.fromOffset(math.random(7, 30), math.random(3, 12)),
-                    Rotation = math.random(0, 359), BackgroundColor3 = cols[math.random(#cols)], BackgroundTransparency = 0.12, BorderSizePixel = 0, ZIndex = 24, Parent = stage,
-                })
-                create("UIGradient", { Transparency = NumberSequence.new(0, 0.55), Rotation = math.random(0, 180), Parent = f })
-                local life = 0.9 + math.random() * 0.9
-                shardsL[#shardsL + 1] = { f = f, x = ox or 0, y = oy or CY, vx = math.cos(a) * v, vy = math.sin(a) * v - 120, r = f.Rotation, vr = (math.random() - 0.5) * 900, life = life, max = life }
-            end
-        end
-
         ------------------------------------------------------------ per-frame animation
-        local exiting, impacted = false, false
+        local exiting, titleReady = false, false
         local glitch = 0
         conn = RunService.Heartbeat:Connect(function(dt)
             local t = os.clock() - t0
-            ticks.Rotation = t * 16
-            ring2.Rotation = -t * 26; orb.Rotation = t * 70
+            sigil.Rotation = t * 5
+            ticks.Rotation = -t * 13
             -- camera: slow push-in + punch on impacts
             punch = punch - punch * math.min(1, dt * 7)
             stageS.Scale = k * (1 + punch + math.min(t * 0.006, 0.035))
-            -- red halo behind the emblem
-            haloA = haloA + (haloTarget - haloA) * math.min(1, dt * 4)
-            local hp = 1 + 0.12 * math.sin(t * 3)
-            for _, h in ipairs(halo) do h.BackgroundTransparency = 1 - math.clamp(haloA * 0.075 * hp, 0, 0.5) end
-            -- HUD data stream
-            hexT = hexT - dt
-            if hexT <= 0 then
-                hexT = 0.09
-                hudTR.Text = string.format("0x%06X // %02d", math.random(0, 0xFFFFFF), math.random(0, 99))
-                hudBR.Text = string.format("%d FPS", math.floor(1 / math.max(dt, 0.001) + 0.5))
-            end
-            -- glass shards
-            for i = #shardsL, 1, -1 do
-                local sh = shardsL[i]
-                sh.life = sh.life - dt
-                if sh.life <= 0 then
-                    sh.f:Destroy(); table.remove(shardsL, i)
-                else
-                    sh.x = sh.x + sh.vx * dt; sh.y = sh.y + sh.vy * dt
-                    local drag = math.max(0, 1 - 1.6 * dt)
-                    sh.vx = sh.vx * drag; sh.vy = sh.vy * drag + 900 * dt
-                    sh.r = sh.r + sh.vr * dt
-                    sh.f.Position = px(sh.x, sh.y); sh.f.Rotation = sh.r
-                    sh.f.BackgroundTransparency = 0.12 + 0.88 * (1 - math.clamp(sh.life / (sh.max * 0.5), 0, 1))
-                end
-            end
             -- screen shake
             if shakeAmp > 0.15 then
                 stage.Position = UDim2.new(.5, (math.random() - .5) * 2 * shakeAmp, .5, (math.random() - .5) * 2 * shakeAmp)
@@ -1987,10 +1970,18 @@ local function playIntro(self)
             elseif shakeAmp > 0 then
                 shakeAmp = 0; stage.Position = UDim2.fromScale(.5, .5)
             end
-            -- vignette pulse
+            -- vignette breathes once the eye is open
             vigA = vigA + (vigTarget - vigA) * math.min(1, dt * 5)
-            local vp2 = vigA + (impacted and (0.07 * math.sin(t * 5.5)) or 0)
+            local vp2 = vigA + (eyeOpen and (0.06 * math.sin(t * 3)) or 0)
             for _, f in ipairs(vig) do f.BackgroundTransparency = math.clamp(vp2, 0, 1) end
+            -- the eye: slit flickers before it opens, glow breathes after
+            if not eyeOpen then
+                eyeStroke.Transparency = 0.25 + 0.5 * math.abs(math.sin(t * 7))
+            elseif not exiting then
+                eyeGlow.BackgroundTransparency = 0.84 + 0.08 * math.sin(t * 3)
+                eyeFlick = eyeFlick * (1 - math.min(1, dt * 9))
+                pupil.Size = UDim2.fromOffset(6 - eyeFlick * 2.5, 32)
+            end
             -- embers
             for _, p in ipairs(embers) do
                 p.y = p.y - p.v * dt
@@ -2012,113 +2003,92 @@ local function playIntro(self)
                     s.f.BackgroundTransparency = 1 - math.clamp(s.life / (s.max * 0.6), 0, 1)
                 end
             end
-            -- chromatic glitch on the title / emblem letter
-            if impacted and not exiting then
-                if math.random() < 0.05 then glitch = (math.random() < 0.5 and -1 or 1) * math.random(3, 7) end
+            -- subtle red ghost glitch on the title
+            if titleReady and not exiting then
+                if math.random() < 0.035 then glitch = (math.random() < 0.5 and -1 or 1) * math.random(3, 6) end
                 glitch = glitch * (1 - math.min(1, dt * 14))
-                local gx = 2 + glitch
-                for _, L in ipairs(letters) do L.gh.Position = UDim2.fromOffset(gx, 2) end
-                discGhost.Position = UDim2.new(.5, gx, .5, 2)
+                for _, L in ipairs(letters) do L.gh.Position = UDim2.fromOffset(2 + glitch, 2) end
             end
         end)
 
-        ------------------------------------------------------------ PHASE 0: the void
-        vigTarget = 0.82
+        ------------------------------------------------------------ PHASE 0: the void (0 - 0.4 s)
+        vigTarget = 0.8
         for _, b in ipairs(bars) do tween(b, 0.8, { Size = UDim2.new(1, 0, 0, BAR) }, Enum.EasingStyle.Quint) end
-        haloTarget = 0.2
-        tween(line, 1.0, { Size = UDim2.fromOffset(math.max(SW * 0.8, 420), 1) }, Enum.EasingStyle.Quint)
-        for _, b in ipairs(brackets) do tween(b, 0.7, { BackgroundTransparency = 0.45 }, Enum.EasingStyle.Quad) end
         tween(skipL, 0.6, { TextTransparency = 0.65 }, Enum.EasingStyle.Quad)
-        W(0.25)
         embersOn = true
-        tween(ember, 0.45, { BackgroundTransparency = 0, Size = UDim2.fromOffset(9, 9) }, Enum.EasingStyle.Quint)
-        tween(emberGlow, 0.45, { Transparency = 0.45 }, Enum.EasingStyle.Quad)
-        W(0.5)
+        W(0.4)
 
-        ------------------------------------------------------------ PHASE 1: three strikes (each one bigger)
-        local function strike(n)
-            if skip then return end
-            flash(RED, n == 1 and 0.6 or 0.42, 0.34)
-            sfx("Crack", n == 1 and 0.7 or 1, n == 1 and 1.2 or 0.9)
-            shatter(n == 1 and 4 or 8, 0.25, 0.35)
-            shake(n == 1 and 6 or 11)
-            kick(n == 1 and 0.015 or 0.035)
-            haloTarget = n == 1 and 0.5 or 0.8
-            if n == 2 then crackWeb(0, CY, 6, 140) end
-            bolts(n == 1 and 4 or 6, false, 0, CY, n == 1 and 170 or 230)
-            sparkBurst(n == 1 and 10 or 18, 260, 0, CY)
-            vigTarget = n == 1 and 0.62 or 0.5
-            tween(ember, 0.25, { Size = UDim2.fromOffset(9 + n * 5, 9 + n * 5) }, Enum.EasingStyle.Back)
-        end
-        strike(1); W(0.38)
-        strike(2); W(0.3)
-
-        ------------------------------------------------------------ PHASE 2: IMPACT (title stamped in)
+        ------------------------------------------------------------ PHASE 1: the sigil is carved (0.4 - 1.7 s)
         if not skip then
-            impacted = true
-            vigTarget = 0.34
-            flash(WHITE, 0.04, 0.12)
-            task.delay(0.12, function() flash(RED, 0.3, 0.6) end)
-            sfx("Impact", 1.4, 0.85, 4)
-            sfx("Crack", 1, 0.7)
-            shatter(26, 0.55, 0.6)
-            shake(26)
-            kick(0.09)
-            haloTarget = 1
-            streak(CY, true)
-            crackWeb(0, CY, TOUCH and 9 or 12, math.min(SW, SH * 1.4) * 0.5)
-            shardBurst(34, 620, 0, CY)
-            bolts(13, true, 0, CY, math.max(SW, SH) * 0.5)
-            sparkBurst(54, 520, 0, CY)
-            speedLines(16)
-            shock(WHITE, 5, 0.55)
-            task.delay(0.07, function() shock(RED, 9, 0.8) end)
-            tween(ember, 0.15, { BackgroundTransparency = 1, Size = UDim2.fromOffset(2, 2) }, Enum.EasingStyle.Quad)
-            tween(emberGlow, 0.15, { Transparency = 1 })
-            coreS.Scale = 2.8
-            tween(coreS, 0.45, { Scale = 1 }, Enum.EasingStyle.Quint)
-            pulse:Play()
-            for i, L in ipairs(letters) do
-                task.delay((i - 1) * 0.03, function()
-                    tween(L.sc, 0.36, { Scale = 1 }, Enum.EasingStyle.Quint)
-                    tween(L.lb, 0.18, { TextTransparency = 0 })
-                    tween(L.gh, 0.18, { TextTransparency = 0.3 })
-                end)
+            sfx("Slash", 0.35, 0.6)
+            tween(ringA, 0.9, { Size = UDim2.fromOffset(188, 188) }, Enum.EasingStyle.Quint)
+            tween(ringB, 1.1, { Size = UDim2.fromOffset(164, 164) }, Enum.EasingStyle.Quint)
+            tween(ringAS, 0.7, { Transparency = 0.15 }, Enum.EasingStyle.Quad)
+            tween(ringBS, 0.9, { Transparency = 0.5 }, Enum.EasingStyle.Quad)
+            for _, p in ipairs(sigilParts) do tween(p.f, 0.9, { BackgroundTransparency = p.a }, Enum.EasingStyle.Quad) end
+            W(0.4)
+            for i = 1, 5 do
+                if skip then break end
+                local a, b = V[starOrder[i]], V[starOrder[i + 1]]
+                starLines[#starLines + 1] = seg(sigil, a[1], a[2], b[1], b[2], 8, RED, 0.72, 9, 0.15)
+                starLines[#starLines + 1] = seg(sigil, a[1], a[2], b[1], b[2], 2, HOT, 0.05, 10, 0.15)
+                sfx("Crack", 0.22, 1.2 + i * 0.12)
+                sparkBurst(3, 130, a[1], CY + a[2])
+                W(0.15)
             end
-            W(0.5)
-            tween(sub, 0.5, { TextTransparency = 0 }, Enum.EasingStyle.Quad)
-            for _, hl in ipairs(huds) do tween(hl, 0.6, { TextTransparency = 0.35 }, Enum.EasingStyle.Quad) end
-            shine()
-            tween(barBg, 0.4, { BackgroundTransparency = 0.82 }, Enum.EasingStyle.Quad)
-            tween(pct, 0.4, { TextTransparency = 0 }, Enum.EasingStyle.Quad)
-            barHead.BackgroundTransparency = 0
-            for i, L in ipairs(letters) do                -- one red-white shimmer wave
+            W(0.18)
+        end
+
+        ------------------------------------------------------------ PHASE 2: the eye awakens (1.7 - 2.5 s)
+        if not skip then
+            eyeOpen = true
+            vigTarget = 0.5
+            flash(RED, 0.5, 0.5)
+            sfx("Impact", 1.3, 0.8, 4)
+            sfx("Crack", 0.8, 0.6)
+            shatter(6, 0.3, 0.4)
+            shake(8); kick(0.04)
+            cracks(7, 0, CY, 170)
+            sparkBurst(26, 420, 0, CY)
+            shock(RED, 7, 0.8)
+            tween(eye, 0.5, { Size = UDim2.fromOffset(104, 44) }, Enum.EasingStyle.Quint)
+            tween(eyeStroke, 0.3, { Transparency = 0.1 })
+            eyeGlow.BackgroundTransparency = 0.7
+            for _, s in ipairs(starLines) do if s.Parent then tween(s, 0.4, { BackgroundTransparency = math.min(s.BackgroundTransparency, 0.35) }) end end
+            W(0.7)
+        end
+
+        ------------------------------------------------------------ PHASE 3: title + loading (2.5 s ->)
+        if not skip then
+            sfx("Crack", 0.6, 0.8)
+            for i, L in ipairs(letters) do
                 task.delay((i - 1) * 0.06, function()
                     if not alive then return end
-                    tween(L.lb, 0.14, { Position = UDim2.fromOffset(0, -5), TextColor3 = Color3.fromRGB(255, 110, 125) }, Enum.EasingStyle.Quad)
-                    task.wait(0.14)
-                    if not alive then return end
-                    tween(L.lb, 0.3, { Position = UDim2.fromOffset(0, 0), TextColor3 = WHITE }, Enum.EasingStyle.Back)
+                    tween(L.lb, 0.5, { Position = UDim2.fromOffset(0, 0), TextTransparency = 0 }, Enum.EasingStyle.Quint)
+                    tween(L.gh, 0.5, { Position = UDim2.fromOffset(2, 2), TextTransparency = 0.4 }, Enum.EasingStyle.Quint)
+                    if i % 2 == 1 or math.random() < 0.3 then task.delay(0.35, function() if alive then drip(L) end end) end
                 end)
             end
+            W(0.45)
+            titleReady = true
+            shake(4); eyeFlick = 1
+            sparkBurst(10, 220, 0, CY + 96)
+            tween(sub, 0.5, { TextTransparency = 0 }, Enum.EasingStyle.Quad)
+            tween(subL, 0.6, { Size = UDim2.fromOffset(90, 1) }, Enum.EasingStyle.Quint)
+            tween(subR, 0.6, { Size = UDim2.fromOffset(90, 1) }, Enum.EasingStyle.Quint)
+            tween(barBg, 0.4, { BackgroundTransparency = 0.8 }, Enum.EasingStyle.Quad)
+            tween(pct, 0.4, { TextTransparency = 0 }, Enum.EasingStyle.Quad)
+            barHead.BackgroundTransparency = 0
         end
 
-        ------------------------------------------------------------ PHASE 3: loading (+ ambient mini strikes)
+        -- ambient: the eye occasionally twitches (one small, calm accent - nothing else moves)
         task.spawn(function()
             while alive and not exiting and not skip do
-                W(1.7)
-                if alive and not exiting and not skip and impacted then shine() end
-            end
-        end)
-        task.spawn(function()
-            while alive and not exiting and not skip do
-                W(0.45 + math.random() * 0.55)
-                if alive and not exiting and not skip and impacted then
-                    bolts(2, false, 0, CY, 150)
-                    sfx("Crack", 0.35, 1.3 + math.random() * 0.5)
-                    shatter(2, 0.15, 0.25)
-                    shake(3)
-                    sparkBurst(5, 160, 0, CY)
+                W(1.1 + math.random() * 0.8)
+                if alive and not exiting and not skip and eyeOpen then
+                    eyeFlick = 1
+                    sfx("Crack", 0.25, 0.7 + math.random() * 0.3)
+                    sparkBurst(4, 140, 0, CY)
                 end
             end
         end)
@@ -2127,7 +2097,6 @@ local function playIntro(self)
         while not skip do
             local a = math.clamp((os.clock() - start) / LOAD, 0, 1)
             local e = ease(a)
-            setProgress(e)
             barFill.Size = UDim2.fromScale(e, 1)
             pct.Text = math.floor(e * 100) .. "%"
             local idx = math.clamp(math.floor(a * #STEPS) + 1, 1, #STEPS)
@@ -2147,38 +2116,36 @@ local function playIntro(self)
             if a >= 1 then break end
             RunService.Heartbeat:Wait()
         end
-        setProgress(1); barFill.Size = UDim2.fromScale(1, 1); pct.Text = "100%"
+        barFill.Size = UDim2.fromScale(1, 1); pct.Text = "100%"
         W(0.2)
 
-        ------------------------------------------------------------ PHASE 4: final strike -> diagonal slash -> curtain splits
+        ------------------------------------------------------------ PHASE 4: the seal shatters -> diagonal slash -> curtain splits
         exiting = true
-        pulse:Cancel()
-        flash(RED, 0.15, 0.4)
-        task.delay(0.05, function() flash(WHITE, 0.2, 0.25) end)
+        flash(WHITE, 0.12, 0.3)
+        task.delay(0.05, function() flash(RED, 0.25, 0.55) end)
         sfx("Impact", 1.5, 0.75, 4)
         sfx("Crack", 1, 0.8)
-        shatter(32, 0.7, 0.65)
-        shake(22)
-        kick(0.11)
-        haloTarget = 2
-        crackBreak()
-        shardBurst(80, 900, 0, CY)
-        streak(CY, true); streak(CY - 46)
-        bolts(14, true, 0, CY, math.max(SW, SH) * 0.55)
-        sparkBurst(60, 600, 0, CY)
-        speedLines(12)
+        shatter(18, 0.5, 0.55)
+        shake(18); kick(0.1)
+        cracks(10, 0, CY, math.max(SW, SH) * 0.5)
+        sparkBurst(46, 520, 0, CY)
         shock(RED, 8, 0.7)
-        tween(coreS, 0.4, { Scale = 1.5 }, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
-        task.wait(0.2)
+        shock(WHITE, 4, 0.5)
+        tween(eye, 0.2, { Size = UDim2.fromOffset(150, 70) }, Enum.EasingStyle.Quint)
+        tween(pupil, 0.2, { Size = UDim2.fromOffset(3, 36) })
+        tween(sigilS, 0.55, { Scale = 1.6 }, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+        for _, s in ipairs(starLines) do if s.Parent then tween(s, 0.45, { BackgroundTransparency = 1 }) end end
+        for _, s in ipairs(sigilStrokes) do tween(s, 0.45, { Transparency = 1 }) end
+        for _, p in ipairs(sigilParts) do tween(p.f, 0.45, { BackgroundTransparency = 1 }) end
+        task.wait(0.22)
 
-        haloTarget = 0
         local seam = create("Frame", {
             AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.new(0, 0, 0, 5),
             BackgroundColor3 = WHITE, BorderSizePixel = 0, ZIndex = 203, Parent = curtain,
         })
         local seamGlow = create("UIStroke", { Thickness = 5, Color = RED, Transparency = 0.2, Parent = seam })
         sfx("Slash", 1.2, 0.9)
-        shatter(14, 0.5, 0.5)
+        shatter(10, 0.4, 0.5)
         tween(seam, 0.22, { Size = UDim2.new(1, 0, 0, 5) }, Enum.EasingStyle.Quint)
         tween(content, 0.42, { GroupTransparency = 1 }, Enum.EasingStyle.Quad)
         task.wait(0.3)
