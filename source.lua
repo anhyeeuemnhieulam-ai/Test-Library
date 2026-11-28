@@ -2539,7 +2539,7 @@ function Section:AddLabel(str)
     local obj = { Type = "Label" }
     local row = create("Frame", { Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, Parent = self.Body })
     local l = text(row, str or "", 12, "SubText", Enum.Font.Gotham)
-    l.Size = UDim2.new(1, -8, 0, 0); l.Position = UDim2.fromOffset(4, 0)
+    l.Size = UDim2.new(1, -20, 0, 0); l.Position = UDim2.fromOffset(10, 0)
     l.AutomaticSize = Enum.AutomaticSize.Y; l.TextWrapped = true; l.TextTruncate = Enum.TextTruncate.None
     function obj:Set(s) l.Text = s end
     function obj:SetVisible(b) row.Visible = b end
@@ -2548,17 +2548,33 @@ end
 
 ---------------------------------------------------------------- Paragraph
 function Section:AddParagraph(o)
+    o = o or {}
     local obj = { Type = "Paragraph" }
     local row = newRow(self, 0)
     row.AutomaticSize = Enum.AutomaticSize.Y
-    create("UIPadding", { PaddingTop = UDim.new(0, 8), PaddingBottom = UDim.new(0, 8), PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10), Parent = row })
-    create("UIListLayout", { Padding = UDim.new(0, 3), Parent = row })
-    local t = text(row, o.Title or "", 13, "Text", Enum.Font.GothamBold)
-    t.Size = UDim2.new(1, 0, 0, 16)
-    local c = text(row, o.Content or "", 11, "SubText", Enum.Font.Gotham)
-    c.Size = UDim2.new(1, 0, 0, 0); c.AutomaticSize = Enum.AutomaticSize.Y
+    -- newRow adds rotated "speed-line" frames (56px tall); inside a list layout they were stacked
+    -- vertically and made the paragraph huge -> drop them here, the stroke + pip are enough
+    for _, ch in ipairs(row:GetChildren()) do
+        if ch:IsA("Frame") and ch.Rotation ~= 0 then ch:Destroy() end
+    end
+    create("UISizeConstraint", { MinSize = Vector2.new(0, 34), Parent = row })
+    -- content lives in its own holder so only the text decides the height
+    local holder = create("Frame", { Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, Parent = row })
+    local pad = create("UIPadding", { PaddingTop = UDim.new(0, 7), PaddingBottom = UDim.new(0, 7), PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10), Parent = holder })
+    create("UIListLayout", { Padding = UDim.new(0, 2), SortOrder = Enum.SortOrder.LayoutOrder, Parent = holder })
+    local t = text(holder, o.Title or "", 13, "Text", Enum.Font.GothamBold)
+    t.Size = UDim2.new(1, 0, 0, 16); t.LayoutOrder = 1
+    local c = text(holder, o.Content or "", 11, "SubText", Enum.Font.Gotham)
+    c.Size = UDim2.new(1, 0, 0, 0); c.AutomaticSize = Enum.AutomaticSize.Y; c.LayoutOrder = 2
     c.TextWrapped = true; c.TextTruncate = Enum.TextTruncate.None
-    function obj:Set(title, content) t.Text = title or t.Text; c.Text = content or c.Text end
+    local function fit()
+        local empty = (c.Text == "")
+        c.Visible = not empty
+        local v = empty and 9 or 7           -- title-only paragraph = same height as a normal button
+        pad.PaddingTop, pad.PaddingBottom = UDim.new(0, v), UDim.new(0, v)
+    end
+    fit()
+    function obj:Set(title, content) t.Text = title or t.Text; c.Text = content or c.Text; fit() end
     function obj:SetVisible(b) row.Visible = b end
     return obj
 end
@@ -5636,24 +5652,39 @@ function Yqantg:CreateWindow(cfg)
     local restPos
     local tok = 0
 
+    -- centre of the mini orb in the gui's own coordinates (nil when there is no orb)
+    local function orbCenter()
+        local o = Window._orb
+        if not (o and o.Parent) then return nil end
+        local gs = gui.AbsoluteSize
+        if gs.X < 2 then
+            local c = workspace.CurrentCamera
+            gs = c and c.ViewportSize or Vector2.new(800, 600)
+        end
+        local p, sz = o.Position, o.Size
+        return UDim2.fromOffset(p.X.Scale * gs.X + p.X.Offset + sz.X.Offset / 2, p.Y.Scale * gs.Y + p.Y.Offset + sz.Y.Offset / 2)
+    end
+
     local function intro()
         tok = tok + 1
         local my = tok
         restPos = restPos or Root.Position
         Root.Visible = true
-        -- start state: low, tilted, small, transparent, stack collapsed
-        Root.Position = UDim2.new(restPos.X.Scale, restPos.X.Offset, restPos.Y.Scale, restPos.Y.Offset + 60)
-        Root.Rotation = -9
-        scale.Scale = Window._scale * 0.78
+        -- NEW STYLE "mini warp": the window unfolds out of the mini orb (spin + grow + fade)
+        Window._settled = false
+        task.delay(0.8, function() if my == tok then Window._settled = true end end)
+        local from = orbCenter()
+        Root.Position = from or UDim2.new(restPos.X.Scale, restPos.X.Offset, restPos.Y.Scale, restPos.Y.Offset + 24)
+        Root.Rotation = from and 28 or 0
+        scale.Scale = Window._scale * (from and 0.04 or 0.7)
         Main.GroupTransparency = 1
         introV.Value = 0
         glow.Thickness = 0.5
         for _, p in ipairs(popItems) do p.Scale = 0 end
         title.TextTransparency = 1; subtitle.TextTransparency = 1
-        -- fly in
-        tween(Main, 0.45, { GroupTransparency = 0 }, Enum.EasingStyle.Quad)
-        tween(scale, 0.85, { Scale = Window._scale }, Enum.EasingStyle.Back)
-        tween(Root, 0.9, { Rotation = 0, Position = restPos }, Enum.EasingStyle.Quint)
+        tween(Main, 0.4, { GroupTransparency = 0 }, Enum.EasingStyle.Quad)
+        tween(scale, 0.7, { Scale = Window._scale }, Enum.EasingStyle.Back)
+        tween(Root, 0.65, { Rotation = 0, Position = restPos }, Enum.EasingStyle.Quint)
         tween(introV, 0.9, { Value = 1 }, Enum.EasingStyle.Back)
         tween(glow, 0.12, { Thickness = 7 })
         task.delay(0.12, function() if my == tok then tween(glow, 0.85, { Thickness = 2 }) end end)
@@ -5686,19 +5717,21 @@ function Yqantg:CreateWindow(cfg)
         Yqantg:_lock("hover" .. tostring(Window), false)
         tok = tok + 1
         local my = tok
-        restPos = Root.Position
+        if Window._settled ~= false then restPos = Root.Position end
         setPanel(false)
-        tween(Main, 0.32, { GroupTransparency = 1 }, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
-        tween(scale, 0.38, { Scale = Window._scale * 0.82 }, Enum.EasingStyle.Back, Enum.EasingDirection.In)
-        tween(Root, 0.38, {
-            Rotation = 7,
-            Position = UDim2.new(restPos.X.Scale, restPos.X.Offset, restPos.Y.Scale, restPos.Y.Offset + 50),
+        -- NEW STYLE "mini warp": the window is sucked into the mini orb (spin + shrink + fade)
+        local to = orbCenter()
+        tween(Main, 0.34, { GroupTransparency = 1 }, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+        tween(scale, 0.45, { Scale = Window._scale * (to and 0.04 or 0.7) }, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+        tween(Root, 0.45, {
+            Rotation = to and -28 or 0,
+            Position = to or UDim2.new(restPos.X.Scale, restPos.X.Offset, restPos.Y.Scale, restPos.Y.Offset + 24),
         }, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
         tween(introV, 0.32, { Value = 0 }, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
         tween(glow, 0.3, { Thickness = 0.5 })
         Yqantg:_syncBlur()
         Yqantg:_sfx("Close")
-        task.delay(0.42, function()
+        task.delay(0.48, function()
             if my ~= tok then return end
             Root.Visible = false
             Root.Rotation = 0
@@ -5756,12 +5789,13 @@ function Yqantg:CreateWindow(cfg)
         end
     end
 
+    -- X button: the window flies into the mini orb and stays there; tap the orb (or the toggle key) to reopen.
+    -- Use Window:Destroy() if you really want it gone.
     function Window:Close()
-        if Window._closing then return end
-        Window._closing = true
-        Window.Visible = false
-        outro()
-        task.delay(0.5, function() Window:Destroy() end)
+        if not Window.Visible then return end
+        if Window._makeOrb then Window._makeOrb() end   -- guarantee a mini exists, even if ToggleButton = false
+        Window:Toggle(false)
+        if Window._orbPop then task.delay(0.3, Window._orbPop) end
     end
 
     function Window:Destroy()
@@ -5872,7 +5906,8 @@ function Yqantg:CreateWindow(cfg)
     end)
 
     -- floating orb (mobile friendly)
-    if cfg.ToggleButton ~= false then
+    local function makeOrb()
+        if Window._orb and Window._orb.Parent then return end
         local orb = create("TextButton", {
             Name = "YqantgOrb", Position = UDim2.new(0, 14, .5, -22), Size = UDim2.fromOffset(44, 44),
             BackgroundColor3 = WHITE, BorderSizePixel = 0, AutoButtonColor = false,
@@ -5932,7 +5967,10 @@ function Yqantg:CreateWindow(cfg)
             end
         end)
         Window._orb = orb
+        Window._orbPop = function() osc.Scale = 0.3; tween(osc, 0.55, { Scale = 1 }, Enum.EasingStyle.Back) end
     end
+    Window._makeOrb = makeOrb
+    if cfg.ToggleButton ~= false then makeOrb() end
 
     ------------------------------------------------ tabs
     function Window:SelectTab(tab)
