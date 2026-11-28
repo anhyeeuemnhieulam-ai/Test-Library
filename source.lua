@@ -2112,9 +2112,9 @@ function Yqantg:_encodeConfig(name)
     return table.concat(head, "\n") .. "\n" .. body, #lines
 end
 
-local function applyVals(self, vals)
+local function applyVals(self, vals, async)
     local n = 0
-    for _, e in ipairs(vals) do
+    local function one(e)
         local opt = self.Options[e[1]]
         if opt then
             local ok = pcall(function()
@@ -2125,7 +2125,26 @@ local function applyVals(self, vals)
             if ok then n = n + 1 end
         end
     end
-    return n
+    if not async then
+        for _, e in ipairs(vals) do one(e) end
+        return n
+    end
+    -- ASYNC: spread the work over many frames (~3ms budget each) so tweens + callbacks
+    -- from dozens of options never land in the same frame (that was the 1-2-3 lag spikes).
+    self._applyTok = (self._applyTok or 0) + 1
+    local my = self._applyTok
+    task.spawn(function()
+        local t0 = os.clock()
+        for _, e in ipairs(vals) do
+            if my ~= self._applyTok or self._unloaded then return end
+            one(e)
+            if os.clock() - t0 > 0.003 then
+                task.wait()
+                t0 = os.clock()
+            end
+        end
+    end)
+    return #vals
 end
 
 -- returns meta, vals, status ("ok" | "corrupt")
@@ -2173,7 +2192,7 @@ function Yqantg:SaveConfig(name)
     return ok and name or false
 end
 
-function Yqantg:LoadConfig(name)
+function Yqantg:LoadConfig(name, async)
     if not name then return false end
     local path = cfgDir(self) .. "/" .. name .. CFG_EXT
     local meta, vals, status = readProfile(path)
@@ -2182,7 +2201,7 @@ function Yqantg:LoadConfig(name)
         if s2 == "ok" then meta, vals, status = m2, v2, s2 end
     end
     if vals and status == "ok" then
-        applyVals(self, vals)
+        applyVals(self, vals, async)
         return true
     end
     -- v2 .json fallback
@@ -2257,7 +2276,7 @@ end
 function Yqantg:LoadAuto()
     self._autoDone = true
     local n = self:GetAutoLoad()
-    return n and self:LoadConfig(n) or false
+    return n and self:LoadConfig(n, true) or false
 end
 
 -- runs LoadAuto once, a moment after the last element was created
@@ -2265,7 +2284,15 @@ function Yqantg:_queueAuto()
     if self._autoDone or self._unloaded or self.AutoLoad == false then return end
     self._autoTok = (self._autoTok or 0) + 1
     local my = self._autoTok
-    task.delay(0.9, function()
+    task.spawn(function()
+        task.wait(1.5)   -- let intro / open animation / image downloads finish first
+        -- then wait until the game is actually running smoothly (12 good frames in a row)
+        local good, waited = 0, 0
+        while good < 12 and waited < 6 do
+            local dt = task.wait()
+            waited = waited + dt
+            if dt < 0.04 then good = good + 1 else good = 0 end
+        end
         if my ~= self._autoTok or self._autoDone or self._unloaded or self.AutoLoad == false then return end
         local n = self:GetAutoLoad()
         if not n then return end
